@@ -252,18 +252,19 @@ function TimelineEntry({ item, agent, root }: { item: TimelineItem; agent: strin
   if (item.type === 'user') return <UserMessage item={item} agent={agent}/>;
   if (item.type === 'assistant') return <article className="message assistant" aria-label={`${agent}, ${time(item.createdAt)}`}><div className="message-body markdown"><Markdown text={item.text}/></div><div className="message-actions"><CopyButton text={item.text}/><time dateTime={new Date(item.createdAt).toISOString()}>{time(item.createdAt)}</time></div></article>;
   const files = item.type === 'files' ? editedFiles(item, root) : [];
-  const label = item.type === 'command' ? shellCommand(item.text) || t('Run command') : item.type === 'files' ? (files.length === 1 ? t('Edited {file}', { file: files[0] }) : t('Edited {n} files', { n: files.length })) : item.text || t('Run tool');
+  const label = item.type === 'command' ? shellCommand(item.text) || t('Run command') : item.type === 'files' ? (files.length === 1 ? t('Edited {file}', { file: files[0] }) : t('Edited {n} files', { n: files.length })) : item.type === 'pdf' ? (item.text ? t('Viewed the PDF: {places}', { places: item.text }) : t('Viewed the PDF')) : item.text || t('Run tool');
   const detail = item.type === 'files' ? files.join('\n') : item.detail;
   const state = toolState(item);
-  return <details className={'tool-item ' + state}><summary><Icon name={item.type === 'command' ? 'terminal' : item.type === 'files' ? 'diff' : 'tool'} size={14}/><span className="tool-label">{label}</span>{state === 'running' ? <span className="spinner" aria-label={t('Running')}/> : state && <span className="tool-status">{item.status === 'declined' ? t('Declined') : t('Failed')}</span>}</summary>{detail && <pre>{detail}</pre>}</details>;
+  return <details className={'tool-item ' + state}><summary><Icon name={item.type === 'command' ? 'terminal' : item.type === 'files' ? 'diff' : item.type === 'pdf' ? 'pdf' : 'tool'} size={14}/><span className="tool-label">{label}</span>{state === 'running' ? <span className="spinner" aria-label={t('Running')}/> : state && <span className="tool-status">{item.status === 'declined' ? t('Declined') : t('Failed')}</span>}</summary>{detail && <pre>{detail}</pre>}</details>;
 }
 
 // Consecutive commands, edits and tool calls fold into one line that opens to the list.
 function ToolGroup({ items, agent, root }: { items: TimelineItem[]; agent: string; root: string }) {
   const commands = items.filter(item => item.type === 'command').length, edits = items.filter(item => item.type === 'files');
-  const files = [...new Set(edits.flatMap(item => editedFiles(item, root)))], tools = items.length - commands - edits.length;
+  const pdfs = items.filter(item => item.type === 'pdf').length;
+  const files = [...new Set(edits.flatMap(item => editedFiles(item, root)))], tools = items.length - commands - edits.length - pdfs;
   const running = items.some(item => toolState(item) === 'running'), failed = items.filter(item => toolState(item) === 'failed').length;
-  const parts = [commands ? tn(commands, 'ran {n} command', 'ran {n} commands') : '', files.length ? (files.length === 1 ? t('edited {file}', { file: files[0] }) : t('edited {n} files', { n: files.length })) : '', tools ? tn(tools, 'used {n} tool', 'used {n} tools') : ''].filter(Boolean).join(t(', '));
+  const parts = [commands ? tn(commands, 'ran {n} command', 'ran {n} commands') : '', files.length ? (files.length === 1 ? t('edited {file}', { file: files[0] }) : t('edited {n} files', { n: files.length })) : '', pdfs ? t('viewed the PDF') : '', tools ? tn(tools, 'used {n} tool', 'used {n} tools') : ''].filter(Boolean).join(t(', '));
   return <details className="tool-group"><summary><Icon name={commands ? 'terminal' : files.length ? 'diff' : 'tool'} size={14}/><span className="tool-group-label">{parts[0].toUpperCase() + parts.slice(1)}</span>{running ? <span className="spinner" aria-label={t('Running')}/> : failed ? <span className="tool-status">{t('{n} failed', { n: failed })}</span> : null}<Icon name="chevronDown" size={13}/></summary>
     <div className="tool-group-items">{items.map(item => <TimelineEntry key={item.id} item={item} agent={agent} root={root}/>)}</div>
   </details>;

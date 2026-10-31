@@ -25,6 +25,8 @@ export interface Task {
   id: string; projectId: string; name: string; title: string; instructions: string;
   titleSource?: 'prompt' | 'generated' | 'manual'; titleRevision?: number; titleGeneration?: 'pending' | 'failed' | null;
   worktree: string; threadId: string | null; turnId: string | null; agent?: AgentId; model: string | null; effort?: string | null; serviceTier?: string;
+  // The agent's thread was started with Papilot's view_pdf tool.
+  viewPdf?: boolean;
   status: TaskStatus; createdAt: number; updatedAt: number; feedbackCursor: number;
   archivedAt?: number | null;
   error: string | null; review: ReviewSummary | null;

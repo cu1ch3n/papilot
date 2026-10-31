@@ -12,6 +12,7 @@ import { Tasks } from "./core/tasks.ts";
 import { Review } from "./core/review.ts";
 import { Deliveries } from "./core/delivery.ts";
 import { more, PublishError, Publisher } from "./core/publish.ts";
+import { view, type ViewRequest } from "./core/view.ts";
 import { acquireLock, now, readJson, writeJson } from "./core/files.ts";
 import { stopAll } from "./core/process.ts";
 import type { ActionKind } from "./types.ts";
@@ -271,6 +272,12 @@ export function createServer(app: App) {
         const job = app.publisher.submit(request.params.name);
         return { job: job.id, status: job.status };
       },
+    );
+    // The task's typeset pages as images, for its agent to look at.
+    server.post<{ Params: { name: string }; Body: ViewRequest }>(
+      "/api/tasks/:name/view",
+      { schema: { body: { ...objectSchema, additionalProperties: false, properties: { locations: { type: "array", maxItems: 8, items: { type: "string", maxLength: 1000 } }, pages: { type: "array", maxItems: 8, items: { type: "string", maxLength: 40 } }, accepted: { type: "boolean" } } } } },
+      (request) => view(app, request.params.name, request.body),
     );
     server.post<{ Params: { name: string }; Body: { mode: "workspace" | "branch"; message?: string } }>(
       "/api/tasks/:name/deliver",

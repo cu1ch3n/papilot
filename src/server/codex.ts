@@ -34,7 +34,8 @@ export class Codex extends EventEmitter {
     };
     child.once('error', failed);
     child.once('exit', (code, signal) => failed(new Error(`Codex exited (${signal || code})`)));
-    await this.request('initialize', { clientInfo: { name: 'papilot', title: 'Papilot', version: VERSION } });
+    // The experimental API carries the tools Papilot gives its threads (see VIEW_PDF_TOOL).
+    await this.request('initialize', { clientInfo: { name: 'papilot', title: 'Papilot', version: VERSION }, capabilities: { experimentalApi: true } });
     this.notify('initialized', {}); this.ready = true;
   }
   private receive(message: any) {

@@ -1249,6 +1249,64 @@ test('a build the agent broke goes back to it once, and its instructions name wh
   } finally { f.close(); }
 });
 
+test('Codex threads get the view_pdf tool, which Papilot answers with typeset pages', async () => {
+  const views: unknown[] = [];
+  const f = fixture(async (_method, route, body) => {
+    if (route.endsWith('/view')) { views.push(body); return { pages: [{ index: 3, label: '1', shows: ['main.tex:12'], file: '/paper/.git/latex-review/views/p-task/1/page-1-3.png' }], missing: ['Page 99: no page has this printed number.'], targets: ['chapters/intro'] }; }
+    if (route.includes('/feedback')) return feedback;
+    return summary;
+  });
+  try {
+    f.store.updateTask(f.task.id, { threadId: null });
+    f.codex.ready = true;
+    await f.workspace.enqueue(f.task.id, 'Fix the runt on page 1.', 'request', false);
+    await tick(); await tick();
+    const start = f.codex.calls.find(call => call.method === 'thread/start')!.params;
+    assert.deepEqual(start.dynamicTools.map((tool: any) => tool.name), ['view_pdf']);
+    assert.match(start.developerInstructions, /use the view_pdf tool and open the pages it draws with your image viewer/);
+    assert.equal(f.store.task(f.task.id).viewPdf, true);
+    // Papilot answers the call itself: the author is not asked.
+    const call = (id: number, tool: string, args: object) => (f.workspace as any).serverRequest({ id, method: 'item/tool/call', params: { threadId: 'thread', turnId: 'turn-new', callId: `call-${id}`, tool, arguments: args } });
+    call(41, 'view_pdf', { locations: ['main.tex:12'], pages: ['99', 7], accepted: 'yes' });
+    for (let i = 0; i < 20 && !f.codex.replies.length; i++) await tick();
+    assert.deepEqual(views, [{ locations: ['main.tex:12'], pages: ['99'] }]);
+    const reply = f.codex.replies[0] as { id: number; result: { success: boolean; contentItems: any[] } };
+    assert.equal(reply.id, 41);
+    assert.equal(reply.result.success, true);
+    // Only text comes back: the page files, which the agent opens with its image viewer.
+    assert.deepEqual(reply.result.contentItems, [{ type: 'inputText', text: 'Your worktree was compiled (only chapters/intro, so page positions differ from the full PDF while printed page numbers match).\nPage 1 shows main.tex:12: /paper/.git/latex-review/views/p-task/1/page-1-3.png\nPage 99: no page has this printed number.\nOpen the page files you need with your image viewer (view_image).' }]);
+    assert.equal(f.workspace.requests.size, 0);
+    assert.equal(f.store.task(f.task.id).status, 'running');
+    call(42, 'other_tool', {});
+    for (let i = 0; i < 20 && f.codex.replies.length < 2; i++) await tick();
+    assert.deepEqual(f.codex.replies[1], { id: 42, result: { success: false, contentItems: [{ type: 'inputText', text: 'Papilot has no tool named other_tool.' }] } });
+    // The chat shows what the agent looked at.
+    await (f.workspace as any).notification({ method: 'item/completed', params: { threadId: 'thread', turnId: 'turn-new', item: { id: 'look', type: 'dynamicToolCall', tool: 'view_pdf', arguments: { locations: ['main.tex:12'], pages: ['99'] }, status: 'completed', success: true } } });
+    const item = f.store.items(f.task.id).find(entry => entry.id === `${f.task.id}:turn-new:look`)!;
+    assert.deepEqual([item.type, item.text, item.status], ['pdf', 'main.tex:12, p. 99', 'completed']);
+  } finally { f.close(); }
+});
+
+test('a Codex without the experimental tool API starts threads without view_pdf', async () => {
+  const f = fixture();
+  try {
+    f.codex.handler = async (method, params) => {
+      if (method === 'thread/start' && params.dynamicTools) throw new RpcResponseError('Invalid request: thread/start.dynamicTools requires experimentalApi capability');
+      return method === 'turn/start' ? { turn: { id: 'turn-new' } } : { thread: { id: 'thread' } };
+    };
+    f.store.updateTask(f.task.id, { threadId: null });
+    f.codex.ready = true;
+    await f.workspace.enqueue(f.task.id, 'Tighten the abstract.', 'request', false);
+    for (let i = 0; i < 10 && !f.codex.calls.some(call => call.method === 'turn/start'); i++) await tick();
+    const starts = f.codex.calls.filter(call => call.method === 'thread/start').map(call => call.params);
+    assert.equal(starts.length, 2);
+    assert.equal(starts[1].dynamicTools, undefined);
+    assert.doesNotMatch(starts[1].developerInstructions, /view_pdf/);
+    assert.equal(f.store.task(f.task.id).viewPdf, false);
+    assert.equal(f.store.task(f.task.id).status, 'running');
+  } finally { f.close(); }
+});
+
 test('a build that fails for reasons outside the agent\'s edits is not sent back to it', async () => {
   const f = fixture(async (_method, route) => {
     if (route.endsWith('/publish')) return { job: 'job' };

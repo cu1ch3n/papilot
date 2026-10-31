@@ -57,6 +57,24 @@ const BUSY = new Set(['running', 'waiting_input', 'building', 'uncertain', 'dele
 // publish.ts), and the request keys of the turns that send them back to it.
 const FIXABLE = /^(Some edits are outside the task scope|The revised document could not be compiled)/;
 const BUILD_FIX = 'build-fix-';
+// The tool Papilot gives Codex threads for looking at the typeset paper. The
+// review engine compiles the task worktree as it is and draws the pages.
+export const VIEW_PDF = 'view_pdf';
+export const VIEW_PDF_TOOL = {
+  type: 'function', name: VIEW_PDF,
+  description: 'Compile the paper in your task worktree as it is now and draw typeset pages as PNG files. Ask for the pages where source lines are typeset (locations, such as "main/chapters/intro.tex:42") or for page numbers as printed on the pages; up to 4 pages per call. The result lists each page\'s file: open the ones you need with your image viewer (view_image) to see them. Set accepted to true to draw the author\'s accepted text, before your edits, instead. Only the chapters needed are compiled when the paper allows it, but this can still take a minute or more.',
+  inputSchema: {
+    type: 'object', additionalProperties: false,
+    properties: {
+      locations: { type: 'array', items: { type: 'string' }, maxItems: 4, description: 'Source lines as file:line, relative to the worktree.' },
+      pages: { type: 'array', items: { type: 'string' }, maxItems: 4, description: 'Page numbers as printed on the pages, such as "12" or "iv".' },
+      accepted: { type: 'boolean', description: 'Show the accepted text instead of your worktree.' },
+    },
+  },
+};
+const VIEW_PDF_UNSUPPORTED = /dynamicTools|experimental/i;
+// What a view_pdf call asked for, as the chat shows it.
+const viewedPlaces = (args: any) => [...(Array.isArray(args?.locations) ? args.locations : []), ...(Array.isArray(args?.pages) ? args.pages.map((page: unknown) => `p. ${page}`) : [])].filter(place => typeof place === 'string').join(', ') + (args?.accepted === true ? ' (accepted)' : '');
 
 const AGENTS: AgentId[] = AGENT_IDS;
 // The small model an agent offers for short text such as a commit message,
@@ -98,6 +116,8 @@ export class Workspace extends EventEmitter {
   private messages = new Map<string, Promise<{ message: string; agent: AgentId }>>();
   private titles = new Map<string, Promise<Task | null>>();
   private helperStops = new Set<() => void>();
+  // Set when Codex refuses the view_pdf tool, so later threads start without it.
+  private noViewPdf = false;
   private projectChanges = new Set<string>();
   private projectRequests = new Map<string, number>();
   importsBusy = () => false;
@@ -377,14 +397,14 @@ export class Workspace extends EventEmitter {
       return files.some(file => file === '' || file === '.') ? [] : files;
     } catch { return []; }
   }
-  private instructions(task: Task, scope: string[] = []) {
+  private instructions(task: Task, scope: string[] = [], viewPdf = false) {
     return `You are ${this.agentOf(task) === 'codex' ? 'the official Codex agent' : AGENT_NAMES[this.agentOf(task)]} running inside Papilot, a paper editing and review workspace.
 Your task is already created. Your editable working directory is ${task.worktree}.
 Original task: ${task.instructions}
 Only edit this isolated task worktree. Never edit the manuscript checkout, other task worktrees, or Papilot's own source/state. Never commit, push, stash, or accept/reject/undo review decisions.
 ${scope.length ? `The review covers only ${scope.join(', ')} in this worktree, and an edit to any other file stops the PDF build. Leave other files unchanged even when project instructions ask for a matching update; mention that update in your summary instead.\n` : ''}Papilot owns the LaTeX review lifecycle: it compiles and publishes automatically AFTER your turn finishes, and delivers review feedback in a new turn. Do not create another review task, invoke publish, or wait on feedback --wait. This application workflow replaces the standalone latex-review skill's publish-and-wait loop. End your turn after completing the requested edits, with a concise summary for the author of what you changed and why; do not describe Papilot's review workflow.
 Preserve meaning and mathematical correctness. Read relevant project instructions. Treat reviewer comments as instructions tied to their round, file and changes. Rejected edits must not be reintroduced unless explicitly requested. If there is a conflict with accepted text, explain it and propose a revision for a new review round; never overwrite the accepted manuscript.
-${this.agentOf(task) === 'antigravity' ? 'Shell commands are not available to you here and any attempt is refused, which ends your turn: read, search and edit files in the task worktree with your file tools only.' : 'You may run tools in the task worktree to inspect and validate your changes.'} If a decision requires the user, ask through the available user-input tool or explain it in your final response. Use English for your progress updates, questions, and final summaries unless the user explicitly requests another language. Preserve the manuscript language unless asked to translate it.`;
+${this.agentOf(task) === 'antigravity' ? 'Shell commands are not available to you here and any attempt is refused, which ends your turn: read, search and edit files in the task worktree with your file tools only.' : 'You may run tools in the task worktree to inspect and validate your changes.'} ${viewPdf ? `When the look of the pages matters, such as line breaks, spacing, figures, tables or displayed formulas, use the ${VIEW_PDF} tool and open the pages it draws with your image viewer to see them as the author does. It compiles the paper, so do not call it for wording alone. ` : ''}If a decision requires the user, ask through the available user-input tool or explain it in your final response. Use English for your progress updates, questions, and final summaries unless the user explicitly requests another language. Preserve the manuscript language unless asked to translate it.`;
   }
   private async startRun(run: Run) {
     let task = this.store.task(run.taskId);
@@ -396,12 +416,23 @@ ${this.agentOf(task) === 'antigravity' ? 'Shell commands are not available to yo
     this.store.saveRun({ ...run, status: 'running' });
     this.store.updateTask(task.id, { status: 'running', turnId: null, error: null });
     if (!task.threadId || !this.loaded.has(task.threadId)) {
-      const options = { cwd: task.worktree, approvalPolicy: 'on-request', sandbox: 'workspace-write', developerInstructions: this.instructions(task, await this.reviewScope(task)), ...(task.model ? { model: task.model } : {}) };
-      const result = task.threadId
-        ? await agent.request('thread/resume', { ...options, threadId: task.threadId, excludeTurns: true })
-        : await agent.request('thread/start', options);
+      // Codex threads get the view_pdf tool when they start, and keep it when resumed.
+      const scope = await this.reviewScope(task), codex = this.agentOf(task) === 'codex';
+      let viewPdf = codex && (task.threadId ? Boolean(task.viewPdf) : !this.noViewPdf);
+      const options = (tool: boolean) => ({ cwd: task.worktree, approvalPolicy: 'on-request', sandbox: 'workspace-write', developerInstructions: this.instructions(task, scope, tool), ...(task.model ? { model: task.model } : {}) });
+      let result;
+      if (task.threadId) result = await agent.request('thread/resume', { ...options(viewPdf), threadId: task.threadId, excludeTurns: true });
+      else {
+        try { result = await agent.request('thread/start', viewPdf ? { ...options(true), dynamicTools: [VIEW_PDF_TOOL] } : options(false)); }
+        catch (error) {
+          // A Codex without the experimental tool API starts its threads without it.
+          if (!viewPdf || !(error instanceof RpcResponseError) || !VIEW_PDF_UNSUPPORTED.test(error.message)) throw error;
+          this.noViewPdf = true; viewPdf = false;
+          result = await agent.request('thread/start', options(false));
+        }
+      }
       if (this.active.get(task.id)?.id !== run.id) return;
-      task = this.store.updateTask(task.id, { threadId: result.thread.id, model: result.model || task.model });
+      task = this.store.updateTask(task.id, { threadId: result.thread.id, model: result.model || task.model, ...(task.threadId ? {} : { viewPdf }) });
       this.loaded.add(result.thread.id);
     }
     this.store.updateTask(task.id, { pendingRunId: run.id });
@@ -478,6 +509,11 @@ ${this.agentOf(task) === 'antigravity' ? 'Shell commands are not available to yo
       if (item.type === 'fileChange') { entry.type = 'files'; entry.text = (item.changes || []).map((change: any) => change.path).join('\n'); }
       if (item.type === 'mcpToolCall') { entry.type = 'tool'; entry.text = `${item.server} / ${item.tool}`; }
       if (item.type === 'toolCall') entry.type = 'tool';
+      if (item.type === 'dynamicToolCall') {
+        if (item.tool !== VIEW_PDF) { entry.type = 'tool'; entry.text = item.tool || ''; }
+        else { entry.type = 'pdf'; entry.text = viewedPlaces(item.arguments); }
+        if (item.success === false) entry.status = 'failed';
+      }
       if (entry.text || entry.detail) this.store.saveItem(entry);
     } else if (method === 'serverRequest/resolved') {
       const buffered = this.earlyRequests.get(task.id);
@@ -511,7 +547,7 @@ ${this.agentOf(task) === 'antigravity' ? 'Shell commands are not available to yo
   }
   private serverRequest(message: any, agent: AgentId = 'codex') {
     const task = this.store.tasks().find(t => t.threadId === message.params?.threadId), runtime = this.agents[agent];
-    const allowed = ['item/commandExecution/requestApproval', 'item/fileChange/requestApproval', 'item/permissions/requestApproval', 'item/tool/requestUserInput'];
+    const allowed = ['item/commandExecution/requestApproval', 'item/fileChange/requestApproval', 'item/permissions/requestApproval', 'item/tool/requestUserInput', 'item/tool/call'];
     if (!task || this.agentOf(task) !== agent || !this.active.has(task.id) || !allowed.includes(message.method)) { runtime.reject(message.id, 'This request is not supported or its turn is no longer active.'); return; }
     if (message.params?.turnId && task.turnId && message.params.turnId !== task.turnId) { runtime.reject(message.id, 'This turn is no longer active.'); return; }
     if (!task.turnId && message.params?.turnId) {
@@ -520,9 +556,34 @@ ${this.agentOf(task) === 'antigravity' ? 'Shell commands are not available to yo
       else runtime.reject(message.id, 'Too many pending requests.');
       return;
     }
+    // Papilot answers its own tools; the author is not asked.
+    if (message.method === 'item/tool/call') { void this.toolCall(task, message, runtime); return; }
     const id = randomUUID();
     this.requests.set(id, { id, taskId: task.id, rpcId: message.id, agent, method: message.method, params: message.params, createdAt: Date.now() });
     this.store.updateTask(task.id, { status: 'waiting_input' });
+  }
+  // The agent looks at typeset pages: the review engine compiles the task
+  // worktree and draws them as files, which the agent opens with its own
+  // image viewer. Returning the images themselves would put them in front of
+  // Codex's code mode as base64 text.
+  private async toolCall(task: Task, message: any, runtime: AgentRuntime) {
+    const { tool, arguments: args } = message.params || {};
+    const reply = (success: boolean, text: string) => runtime.respond(message.id, { success, contentItems: [{ type: 'inputText', text }] });
+    if (tool !== VIEW_PDF) { reply(false, `Papilot has no tool named ${tool}.`); return; }
+    const strings = (value: unknown) => Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string').slice(0, 4) : [];
+    try {
+      const client = await this.connectReview(this.store.project(task.projectId).path);
+      const shown = await client.post<{ pages: { index: number; label: string; shows: string[]; file: string }[]; missing: string[]; targets: string[]; error?: string; details?: string[] }>(
+        `${taskRoute(task.name)}/view`, { locations: strings(args?.locations), pages: strings(args?.pages), ...(args?.accepted === true ? { accepted: true } : {}) }, 30 * 60000);
+      if (shown.error) { reply(false, [shown.error, ...(shown.details || [])].join('\n')); return; }
+      const compiled = shown.targets[0] === 'full' ? 'the whole paper' : `only ${shown.targets.join(', ')}, so page positions differ from the full PDF while printed page numbers match`;
+      reply(true, [
+        `${args?.accepted === true ? 'The accepted text' : 'Your worktree'} was compiled (${compiled}).`,
+        ...shown.pages.map(page => `Page ${page.label} shows ${page.shows.join(', ')}: ${page.file}`),
+        ...shown.missing,
+        ...(shown.pages.length ? ['Open the page files you need with your image viewer (view_image).'] : []),
+      ].join('\n'));
+    } catch (error) { reply(false, 'Papilot could not show the pages: ' + errorText(error)); }
   }
   answer(id: string, input: { decision?: string; answers?: Record<string, string> }) {
     const request = this.requests.get(id); if (!request) throw new Error('This request has ended or the connection has restarted.');

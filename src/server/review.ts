@@ -3,7 +3,7 @@ import path from 'node:path';
 import { ENGINE } from './paths.ts';
 import type { Task } from '../shared.ts';
 
-export interface ReviewClient { url: string; token: string; get<T = any>(route: string): Promise<T>; post<T = any>(route: string, body?: unknown): Promise<T> }
+export interface ReviewClient { url: string; token: string; get<T = any>(route: string): Promise<T>; post<T = any>(route: string, body?: unknown, timeout?: number): Promise<T> }
 let modulePromise: Promise<{ connect: (root: string) => Promise<ReviewClient> }> | null = null;
 export function reviewClient(root: string): Promise<ReviewClient> {
   modulePromise ??= import(pathToFileURL(path.join(ENGINE, 'src/client.ts')).href);

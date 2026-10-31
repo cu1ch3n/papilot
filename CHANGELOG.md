@@ -6,6 +6,8 @@ Notable changes to Papilot, newest first. The format follows [Keep a Changelog](
 
 ### Added
 
+- **Codex can see the PDF.** New Codex tasks get a `view_pdf` tool: Codex asks for the pages where source lines or printed page numbers appear, in its worktree or in the accepted text, and Papilot compiles them and draws the pages as images that Codex opens with its image viewer. Codex uses it when the look of the page matters, such as line breaks and spacing, and the conversation shows each look. Only the chapters needed are compiled, and the review after the turn reuses the build.
+
 - **More agents, found automatically.** Cursor (through the Cursor SDK, with `CURSOR_API_KEY`), GLM (Claude Code on Zhipu's Anthropic-compatible endpoint, with `ZHIPU_API_KEY` or `ZAI_API_KEY`), DeepSeek (`dsh acp` from DeepSeek Harness), Qwen Code (`qwen --acp`) and OpenCode (`opencode acp`) join the agent menu. Papilot offers only the agents it finds on the host, looks again on **Reconnect**, and names the rest in Settings → Runtime & diagnostics. DeepSeek keeps its workspace sandbox, Qwen runs in Auto Edit mode, and OpenCode asks before commands and anything outside the worktree. `papilot doctor` checks each of them and lists agents that are not set up for information only.
 
 - **Kimi Code support.** Choose Kimi for paper-editing tasks using your local Kimi Code CLI login. The ACP adapter supports model and thinking-level selection, streamed replies, image inputs, tool approvals, cancellation and session recovery. Diagnostics include Kimi CLI availability; set `PAPILOT_KIMI_BIN` for a custom executable path.

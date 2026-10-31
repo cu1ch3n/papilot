@@ -139,6 +139,7 @@ export const zhCN: Record<string, string> = {
   'You, {time}': '你，{time}', 'Note on the PDF': 'PDF 上的批注', '{n} notes on the PDF': 'PDF 上的 {n} 条批注', 'Marked region': '标记的区域',
   '{n} accepted': '{n} 处已接受', '{n} rejected': '{n} 处已拒绝', '{n} comment': '{n} 条评论', '{n} comments': '{n} 条评论', '{n} undone': '{n} 处已撤销', 'build error': '编译错误',
   'You sent review feedback, {time}': '你发送了审阅反馈，{time}', 'Review feedback': '审阅反馈',
+  'Viewed the PDF: {places}': '查看了 PDF：{places}', 'Viewed the PDF': '查看了 PDF', 'viewed the PDF': '查看了 PDF',
   'Build failed · sent to {agent}': '编译失败 · 已发给 {agent}', 'Papilot sent the build error to {agent}, {time}': 'Papilot 已将编译错误发给 {agent}，{time}',
   'With review feedback': '附带审阅反馈',
   'Run command': '运行命令', 'Edited {file}': '编辑了 {file}', 'Edited {n} files': '编辑了 {n} 个文件', 'Run tool': '使用工具',
