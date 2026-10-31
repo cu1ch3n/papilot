@@ -66,7 +66,7 @@
     "doctor": "node bin/papilot.mjs doctor",
     "service:install": "tsx scripts/service.ts install",
     "service:stop": "tsx scripts/service.ts stop",
-    "test:ui": "npm run build && node scripts/check-ui.mjs && node scripts/check-updates.mjs && node scripts/check-papers.mjs && node scripts/check-imports.mjs && node scripts/check-compilation.mjs && node scripts/check-review-notes.mjs && node --import tsx scripts/check-note-groups.mjs && node scripts/check-note-selection.mjs && node --import tsx scripts/check-note-results.mjs && node --import tsx scripts/check-review-flow.mjs && node scripts/check-skills.mjs && node --import tsx scripts/check-skill-library.mjs && node scripts/check-attachments.mjs && node --import tsx scripts/check-accounts.mjs",
+    "test:ui": "npm run build && node scripts/check-ui.mjs && node scripts/check-updates.mjs && node scripts/check-papers.mjs && node scripts/check-imports.mjs && node scripts/check-compilation.mjs && node scripts/check-build-problems.mjs && node scripts/check-review-notes.mjs && node --import tsx scripts/check-note-groups.mjs && node scripts/check-note-selection.mjs && node --import tsx scripts/check-note-results.mjs && node --import tsx scripts/check-review-flow.mjs && node scripts/check-skills.mjs && node --import tsx scripts/check-skill-library.mjs && node scripts/check-attachments.mjs && node --import tsx scripts/check-accounts.mjs",
     "site": "node scripts/build-site.mjs",
     "test:site": "npm run site && node scripts/check-site.mjs",
     "prepack": "npm run build && npm run setup:review"

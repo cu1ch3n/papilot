@@ -356,6 +356,9 @@ export async function buildApp(options: AppOptions) {
     const { title } = annotationTask(notes);
     return workspace.createTask({ id, projectId: project.id, title, instructions: '', annotations: notes.map(note => note.id), agent: agent(b.agent), model: typeof b.model === 'string' ? b.model : undefined, effort: effort(b.effort), serviceTier: b.serviceTier === undefined ? undefined : string(b.serviceTier, 'Service tier', 64), author: author(request.viewer) });
   });
+  // What the last build reported, placed on its PDF, and the TeX log itself.
+  app.get<{ Params: { id: string } }>('/api/projects/:id/manuscript/problems', project(), request => manuscripts.problems(store.project(request.params.id).id));
+  app.get<{ Params: { id: string } }>('/api/projects/:id/manuscript/log', project(), (request, reply) => reply.type('text/plain; charset=utf-8').header('Cache-Control', 'no-store').send(manuscripts.log(store.project(request.params.id).id)));
   // Exact word places for the PDF view's selection layer; immutable per build key.
   app.get<{ Params: { id: string }; Querystring: { key?: string; page?: string } }>('/api/projects/:id/manuscript/words', project(), async (request, reply) => {
     const project = store.project(request.params.id);

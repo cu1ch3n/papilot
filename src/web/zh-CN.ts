@@ -427,4 +427,12 @@ export const zhCN: Record<string, string> = {
   'Undo typing, a deleted note, or the last review decision, depending on focus.': '根据焦点位置，撤销输入、恢复删除的批注或撤销上一次审阅操作。',
   'Send the review comment being written.': '发送正在填写的审阅意见。',
   'Close the current editor or cancel region selection.': '关闭当前编辑器或取消画框。',
+  'Undefined reference': '未定义的引用', 'Undefined citation': '未定义的文献', 'Label defined more than once': '标签重复定义',
+  'Missing file': '缺少文件', 'Missing character': '缺少字符', 'Line too wide by {amount}pt': '行宽超出 {amount}pt',
+  'Fix these problems from the last compilation:': '修复上次编译报告的这些问题：', 'Errors': '错误', 'Warnings': '警告',
+  '{n} compilation error': '{n} 个编译错误', '{n} compilation errors': '{n} 个编译错误', '{n} compilation warning': '{n} 个编译警告', '{n} compilation warnings': '{n} 个编译警告',
+  'Compilation log': '编译日志', 'p. {page}': '第 {page} 页', 'Compilation problems': '编译问题', 'Recompiling; this list will update.': '正在重新编译，列表稍后更新。',
+  'Loading…': '正在加载…', 'The first build is still running.': '首次编译仍在进行。', 'No problems in the last build.': '上次编译没有发现问题。',
+  'Typesetting and other remarks': '排版及其他提示', 'Raw log': '原始日志', 'Fix with an agent…': '交给代理修复…',
+  'The latest changes did not compile. This is the last PDF that did.': '最新的修改未能编译，当前显示的是上一次编译成功的 PDF。', 'Show problems': '查看问题', 'Reported {n} times': '出现 {n} 次',
 };

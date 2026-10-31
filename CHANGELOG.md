@@ -6,6 +6,7 @@ Notable changes to Papilot, newest first. The format follows [Keep a Changelog](
 
 ### Added
 
+- **Compilation problems beside Recompile.** A quiet log icon counts the last build's undefined references and citations, duplicate labels, missing files and errors; overfull lines and package remarks are listed but never counted. Open it to see each problem with its file, line and page, jump to the exact spot on the PDF (SyncTeX places it, down to the `??`), read the raw log, or prefill a Fix LaTeX warnings task. A failed rebuild keeps the last PDF and says so in one line.
 - **Kimi Code support.** Choose Kimi for paper-editing tasks using your local Kimi Code CLI login. The ACP adapter supports model and thinking-level selection, streamed replies, image inputs, tool approvals, cancellation and session recovery. Diagnostics include Kimi CLI availability; set `PAPILOT_KIMI_BIN` for a custom executable path.
 
 ### Changed

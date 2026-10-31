@@ -7,10 +7,11 @@ import path from 'node:path';
 import { promisify } from 'node:util';
 import { pathToFileURL } from 'node:url';
 import { ENGINE } from './paths.ts';
-import type { Annotation, GitFile, GitStatus, ManuscriptBuild } from '../shared.ts';
+import type { Annotation, BuildProblem, GitFile, GitStatus, ManuscriptBuild, ManuscriptProblems } from '../shared.ts';
 import { notesInstructions } from '../notes.ts';
 import { ignorePattern } from '../commit.ts';
 import { AnnotationPages, placeAnnotation } from './annotation-placement.ts';
+import { collectProblems, countProblems, locateProblems, sortProblems, type StoredProblem } from './build-problems.ts';
 
 type Rect = [number, number, number, number];
 
@@ -340,12 +341,26 @@ export async function pdfWords(pdf: string, page: number) {
   } finally { document.close(); }
 }
 
-interface Build { tree: string; status: ManuscriptBuild['status']; key?: string; pdf?: string; root?: string; sourceDir?: string; pages?: [number, number][]; builtAt?: number; error?: string }
+// `problems` come from the last finished build. They are placed on the PDF
+// named `problemsKey`; a failed build has no PDF of its own to place them on.
+interface Build {
+  tree: string; status: ManuscriptBuild['status']; key?: string; pdf?: string; root?: string; sourceDir?: string; pages?: [number, number][]; builtAt?: number; error?: string;
+  problems?: StoredProblem[]; problemsKey?: string; log?: string; logFolder?: string;
+}
+
+// The TeX log, without the build folder's absolute path.
+function readLog(file: string, folder?: string) {
+  let text = fs.readFileSync(file, 'utf8');
+  if (folder) text = text.split(folder).join('…');
+  return text.split(os.homedir()).join('~');
+}
 
 export class Manuscripts extends EventEmitter {
   private builds = new Map<string, Build>();
   private oldPdfs = new Map<string, string | null>();
   private placements = new Map<string, (Pick<Annotation, 'key' | 'page' | 'rect' | 'rects' | 'source'>) | null>();
+  // Placed problems per problem list; a rebuild in progress shares its predecessor's list.
+  private located = new WeakMap<StoredProblem[], Promise<BuildProblem[]>>();
   get busyForUpdate() { return [...this.builds.values()].some(build => build.status === 'building'); }
   busyForProject(id: string) { return this.builds.get(id)?.status === 'building'; }
   forgetProject(id: string) { this.builds.delete(id); }
@@ -355,29 +370,49 @@ export class Manuscripts extends EventEmitter {
     let build = this.builds.get(projectId);
     if (!build || (build.status !== 'building' && (build.tree !== tree || rebuild))) build = this.start(projectId, root, tree, build, rebuild);
     const { status: state, key, pages, builtAt, error } = build;
-    return { git: status, build: { status: state, key, pages, builtAt, error, current: build.tree === tree && state === 'ready' } };
+    return { git: status, build: { status: state, key, pages, builtAt, error, current: build.tree === tree && state === 'ready', problems: build.problems && countProblems(build.problems) } };
   }
 
   // Keep the previous pages visible while a newer working tree compiles.
   private start(projectId: string, root: string, tree: string, previous?: Build, force = false) {
     if (previous?.key && previous.pdf) this.oldPdfs.set(`${root}:${previous.key}`, previous.pdf);
-    const build: Build = { tree, status: 'building', key: previous?.key, pdf: previous?.pdf, root: previous?.root, sourceDir: previous?.sourceDir, pages: previous?.pages, builtAt: previous?.builtAt };
+    const build: Build = { tree, status: 'building', key: previous?.key, pdf: previous?.pdf, root: previous?.root, sourceDir: previous?.sourceDir, pages: previous?.pages, builtAt: previous?.builtAt, problems: previous?.problems, problemsKey: previous?.problemsKey, log: previous?.log, logFolder: previous?.logFolder };
     this.builds.set(projectId, build);
     void (async () => {
+      let project: { source_dir?: string; doc_dir?: string; state: string } | undefined;
       try {
         const { Builder, Repo, loadProject, mupdf } = await engine();
-        const project = loadProject(root), result = await new Builder(project, new Repo(root)).build(tree, ['full'], null, { force });
+        project = loadProject(root);
+        const result = await new Builder(project, new Repo(root)).build(tree, ['full'], null, { force });
         const document = mupdf.Document.openDocument(fs.readFileSync(result.pdf), 'application/pdf');
         const pages: [number, number][] = [];
         for (let i = 0; i < document.countPages(); i++) { const [x0, y0, x1, y1] = document.loadPage(i).getBounds(); pages.push([Math.round(x1 - x0), Math.round(y1 - y0)]); }
         document.destroy?.();
         const key = createHash('sha256').update(result.key + result.pdf).digest('hex').slice(0, 16);
         if (this.builds.get(projectId) !== build) return;
-        Object.assign(build, { status: 'ready', key, pdf: result.pdf, root: result.root, sourceDir: project.source_dir || '', pages, builtAt: Date.now(), error: undefined });
+        const log = String(result.pdf).replace(/\.pdf$/, '.log');
+        let problems: StoredProblem[] = [];
+        try { problems = collectProblems(fs.readFileSync(log, 'utf8'), { cwd: result.cwd, root: result.root, sourceDir: project!.source_dir || '' }); } catch { /* A build without a readable log reports no problems. */ }
+        Object.assign(build, { status: 'ready', key, pdf: result.pdf, root: result.root, sourceDir: project!.source_dir || '', pages, builtAt: Date.now(), error: undefined, problems, problemsKey: key, log: fs.existsSync(log) ? log : undefined, logFolder: path.dirname(result.root) });
       } catch (error) {
         if (this.builds.get(projectId) !== build) return;
-        const detail = error as { message?: string; details?: string[] };
-        Object.assign(build, { status: 'failed', error: [detail.message, ...(detail.details || [])].filter(Boolean).join('\n') || 'The manuscript could not be compiled.' });
+        const detail = error as { message?: string; details?: string[]; log?: string };
+        const message = [detail.message, ...(detail.details || [])].filter(Boolean).join('\n') || 'The manuscript could not be compiled.';
+        // The engine keeps latexmk's transcript and the TeX log of a failed
+        // build; its sources are gone, so files resolve in the working tree.
+        let problems: StoredProblem[] = [];
+        if (detail.log && project) try {
+          const kept = fs.readFileSync(detail.log, 'utf8'), marker = '\n\n--- TeX log ---\n', at = kept.indexOf(marker);
+          // TeX stopped in its first pass, before references resolve, so only
+          // the errors of a failed run mean anything.
+          if (at >= 0) problems = collectProblems(kept.slice(at + marker.length), { cwd: path.join(root, project.doc_dir || '.'), root: path.join(root, project.source_dir || '.'), sourceDir: project.source_dir || '' })
+            .filter(problem => problem.severity === 'error').map(({ source: _source, ...problem }) => problem);
+        } catch { /* Fall back to the compiler's own message below. */ }
+        if (!problems.length) problems.push({ kind: 'error', severity: 'error', message: detail.message || message });
+        // The previous PDF stays on screen, and so do its warnings and places.
+        const shown = build.problemsKey && build.problemsKey === build.key ? (build.problems || []).filter(problem => problem.severity !== 'error') : [];
+        const logFolder = detail.log && project ? path.join(project.state, 'cache/builds', path.basename(detail.log, '.log')) : undefined;
+        Object.assign(build, { status: 'failed', error: message, problems: [...problems, ...shown], problemsKey: shown.length ? build.problemsKey : undefined, log: detail.log && fs.existsSync(detail.log) ? detail.log : undefined, logFolder });
       }
       this.emit('change', projectId);
     })();
@@ -433,6 +468,38 @@ export class Manuscripts extends EventEmitter {
       if (this.oldPdfs.size > 500) this.oldPdfs.clear();
       return this.builds.get(projectId)?.key === build.key ? output : notes;
     } finally { current.close(); for (const entry of old.values()) entry.document.close(); }
+  }
+
+  // Every problem of the last finished build, placed on its PDF when there is
+  // one. Placing runs SyncTeX per problem, once per build.
+  async problems(projectId: string): Promise<ManuscriptProblems> {
+    const build = this.builds.get(projectId);
+    if (!build?.problems) return { status: build?.status || 'building', problems: [], log: Boolean(build?.log) };
+    const { problems, problemsKey: key, pdf } = build;
+    if (!key || key !== build.key || !pdf) return { status: build.status, problems: sortProblems(problems.map(({ source: _source, ...problem }) => problem)), log: Boolean(build.log) };
+    let placed = this.located.get(problems);
+    if (!placed) {
+      placed = (async () => {
+        const { PdfDocument } = await engine();
+        const document = new PdfDocument(pdf), pages = new Map<number, ReturnType<typeof document.page>>();
+        try {
+          return sortProblems(await locateProblems(problems, pdf, page => {
+            if (!Number.isInteger(page) || page < 0 || page >= document.length) return null;
+            if (!pages.has(page)) pages.set(page, document.page(page));
+            return pages.get(page)!;
+          }));
+        } finally { for (const page of pages.values()) page.close(); document.close(); }
+      })();
+      placed.catch(() => this.located.delete(problems));
+      this.located.set(problems, placed);
+    }
+    return { status: build.status, key, problems: await placed, log: Boolean(build.log) };
+  }
+
+  log(projectId: string) {
+    const build = this.builds.get(projectId);
+    if (!build?.log || !fs.existsSync(build.log)) throw Object.assign(new Error('There is no compilation log yet.'), { statusCode: 404 });
+    return readLog(build.log, build.logFolder);
   }
 
   pdf(projectId: string, key: string) {

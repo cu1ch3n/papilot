@@ -1,0 +1,48 @@
+/* The log button stays quiet: a small grey count for warnings, red only when
+   the build failed. */
+.problems-button{position:relative}
+.problems-count{position:absolute;top:1px;right:0;min-width:15px;height:15px;padding:0 4px;border-radius:999px;border:1px solid var(--line);background:var(--bg-muted);color:var(--text-2);font-size:9.5px;font-weight:600;line-height:13px;text-align:center;font-variant-numeric:tabular-nums;pointer-events:none}
+.problems-button[data-severity=error]{color:var(--red)}
+.problems-button[data-severity=error] .problems-count{border-color:var(--red);background:var(--red);color:#fff}
+
+.problems-panel{position:fixed;inset:auto;margin:0;padding:0;width:min(420px,calc(100vw - 16px));max-height:min(70vh,560px);border:1px solid var(--line);border-radius:var(--r-lg);background:var(--bg);color:var(--text);box-shadow:var(--float);font:13px/1.45 var(--sans);overflow:hidden}
+.problems-panel:popover-open{display:flex;flex-direction:column;animation:menu-in .14s var(--ease)}
+.problems-header{display:flex;align-items:baseline;gap:10px;padding:10px 14px;border-bottom:1px solid var(--line)}
+.problems-header strong{font-size:13.5px;font-weight:600}
+.problems-status{color:var(--text-3);font-size:12px}
+.problems-body{flex:1 1 auto;min-height:0;overflow:auto;overscroll-behavior:contain;padding:4px 0 6px}
+.problems-empty{margin:0;padding:18px 14px;color:var(--text-3);text-align:center}
+.problems-body h3,.problems-minor summary{margin:0;padding:9px 14px 3px;color:var(--text-3);font-size:12px;font-weight:600}
+.problems-body h3 span,.problems-minor summary span{font-weight:400;font-variant-numeric:tabular-nums}
+.problems-minor summary{cursor:pointer;padding-bottom:6px;list-style-position:inside}
+.problems-minor summary:hover{color:var(--text-2)}
+.problems-body ul{margin:0;padding:0;list-style:none}
+.problems-body li>button,.problem-static{display:flex;flex-direction:column;gap:1px;width:100%;padding:6px 14px 6px 26px;text-align:left;color:inherit;position:relative}
+.problems-body li>button:hover,.problems-body li>button:focus-visible{background:var(--bg-hover);outline:none}
+.problems-body li>*::before{content:"";position:absolute;left:13px;top:13px;width:6px;height:6px;border-radius:50%;background:var(--line-strong)}
+.problems-body li[data-severity=error]>*::before{background:var(--red)}
+.problems-body li[data-severity=warning]>*::before{background:var(--text-3)}
+.problem-title{display:flex;align-items:baseline;gap:6px;min-width:0;overflow-wrap:anywhere}
+.problem-title code{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text-2);font:12px var(--mono)}
+.problem-repeat{flex-shrink:0;color:var(--text-3);font-size:12px;font-variant-numeric:tabular-nums}
+.problem-place{display:flex;gap:10px;min-width:0;color:var(--text-3);font-size:12px}
+.problem-file{min-width:0;overflow-wrap:anywhere;font-family:var(--mono);font-size:11.5px}
+.problem-page{margin-left:auto;flex-shrink:0;font-variant-numeric:tabular-nums}
+.problems-footer{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;padding:8px 10px 8px 14px;border-top:1px solid var(--line)}
+.problems-footer a{flex-shrink:0;white-space:nowrap;color:var(--text-2);font-size:12.5px}
+.problems-footer a:hover{color:var(--text)}
+.problems-footer .button{margin-left:auto;gap:6px}
+
+/* A jump marks the problem for a moment, then gets out of the way. */
+.problem-flash{position:absolute;z-index:3;border-radius:3px;outline:2px solid color-mix(in srgb,var(--primary) 70%,transparent);outline-offset:1px;background:color-mix(in srgb,var(--primary) 16%,transparent);pointer-events:none;animation:problem-flash 2.2s var(--ease) forwards}
+@keyframes problem-flash{0%,55%{opacity:1}100%{opacity:0}}
+
+@media(max-width:680px){
+  .problems-panel{inset:auto 8px calc(8px + env(safe-area-inset-bottom)) 8px;width:auto;max-height:70vh;max-height:70dvh}
+  .problems-body li>button,.problem-static{padding-top:9px;padding-bottom:9px}
+}
+
+/* A failed rebuild keeps the previous PDF and says so in one line. */
+.manuscript-note.brief{display:flex;align-items:baseline;gap:10px;padding-block:6px;font-size:12.5px}
+.manuscript-note.brief span{min-width:0}
+.note-link{flex-shrink:0;color:inherit;font-weight:600;text-decoration:underline;text-underline-offset:2px}
