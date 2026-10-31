@@ -239,6 +239,127 @@ export interface RenderedRound {
   units: Record<string, VisualUnit>;
   sections: { node: string; number: string; title: string; blocks: Block[] }[];
   loose: ChangeBlock[];
+  references?: References;
+}
+/** One field of a changed bibliography entry, before and after; null
+ * where the entry lacks it. `resolved` is the new value with @string
+ * macros expanded, when that differs. */
+export interface ReferenceField {
+  name: string;
+  old: string | null;
+  new: string | null;
+  resolved?: string;
+}
+export interface ReferenceCitation {
+  file: string;
+  line: number;
+  section: string | null;
+}
+/** still-cited: a removed key that the document still cites.
+ * not-in-bibliography: the document does not read this .bib file. */
+export type ReferenceProblem =
+  | "still-cited"
+  | "duplicate-key"
+  | "unreadable"
+  | "not-in-bibliography";
+/** A bibliography entry that a round adds, removes or modifies, shown whole
+ * under the edit it belongs to. */
+export interface ReferenceEntry {
+  id: string;
+  unit: string;
+  file: string;
+  key: string;
+  old_key?: string;
+  type: string;
+  old_type?: string;
+  status: "added" | "removed" | "modified";
+  fields: ReferenceField[];
+  lines: Span;
+  /** Where the revised document cites the key. */
+  cited: ReferenceCitation[];
+  /** Where it still cites a renamed entry's old key. */
+  old_cited?: ReferenceCitation[];
+  problems: ReferenceProblem[];
+  error?: string;
+}
+/** A key the revised document newly cites with no bibliography entry. */
+export interface MissingCitation {
+  key: string;
+  file: string;
+  line: number;
+  unit: string | null;
+  section: string | null;
+}
+export interface References {
+  entries: ReferenceEntry[];
+  missing: MissingCitation[];
+}
+/** A published record a bibliography entry was compared with. */
+export interface CheckRecord {
+  source: "doi" | "crossref" | "arxiv" | "dblp";
+  title: string;
+  authors: string[];
+  year: number | null;
+  venue: string | null;
+  doi: string | null;
+  url: string;
+}
+export interface CheckDifference {
+  field: "title" | "author" | "year" | "doi" | "arxiv";
+  bib: string;
+  record: string;
+  /** Shown, but not a reason to doubt the entry: punctuation in a title,
+   * or a preprint's year before the published version's. */
+  minor?: boolean;
+}
+/** verified: a record agrees. mismatch: a record of the same work differs,
+ * or the DOI names another work. unverified: no record was found.
+ * failed: a source could not be reached. skipped: nothing to look up. */
+export interface ReferenceCheck {
+  status: "verified" | "mismatch" | "unverified" | "failed" | "skipped";
+  record?: CheckRecord;
+  differences: CheckDifference[];
+  /** What the entry was looked up by. */
+  via: "doi" | "arxiv" | "title" | null;
+  reason?: "doi-not-found" | "arxiv-not-found" | "no-match" | "nothing-to-check";
+  /** Sources that could not be reached for this check. */
+  unavailable: string[];
+  checked: number;
+}
+export interface ReferenceChecks {
+  checks: Record<string, ReferenceCheck>;
+  /** Entries still being looked up. */
+  pending: number;
+  /** Entries the author has checked by hand, with when (seconds). A
+   * confirmation holds while the entry's looked-up fields stay the same. */
+  confirmed?: Record<string, number>;
+}
+/** An entry of the paper's bibliography as it is now. */
+export interface BibliographyEntry {
+  id: string;
+  file: string;
+  key: string;
+  type: string;
+  fields: { name: string; value: string; resolved?: string }[];
+  lines: Span;
+  cited: ReferenceCitation[];
+  error?: string;
+}
+/** The whole bibliography of a paper: its entries, where each is cited,
+ * and what is wrong with them without looking anything up. */
+export interface Bibliography {
+  /** The .bib files the paper names, and those of them that do not exist. */
+  bibs: string[];
+  absent: string[];
+  entries: BibliographyEntry[];
+  /** Citations of keys no entry defines, each place. */
+  missing: (ReferenceCitation & { key: string })[];
+  /** Entries sharing a key. */
+  duplicates: string[][];
+  /** Entries under different keys with the same DOI or title. */
+  similar: { ids: string[]; by: "doi" | "title" }[];
+  /** \nocite{*} puts every entry in the bibliography. */
+  all_cited: boolean;
 }
 export interface RenderRequest {
   main: string;
@@ -273,6 +394,7 @@ export interface RoundDetail extends Omit<RenderedRound, "units"> {
   units: (Unit & Partial<VisualUnit> & { history?: History[] })[];
   warnings: string[];
   files: string;
+  references?: References;
 }
 export type TaskState =
   "editing" | "building" | "build_failed" | "reviewing" | "revise" | "done";

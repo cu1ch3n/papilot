@@ -37,6 +37,7 @@ import { TaskCommit } from './task-commit.tsx';
 import { TaskCommitDraft } from './task-commit-draft.ts';
 import { taskSaveStatus } from './task-save-status.ts';
 import { GitCounts, GitRepository } from './git-overview.tsx';
+import { problemCount, ReferencesPanel, useBibliography } from './references-panel.tsx';
 import { PeopleDialog } from './people-dialog.tsx';
 import { Invite, SignIn } from './sign-in.tsx';
 import { forgetBrowserState, isSignedOut, setSignedOut, useSignedOut } from './session.ts';
@@ -789,6 +790,9 @@ function App() {
   }, [renaming]);
   const [editingPaper, setEditingPaper] = useState<Project | null>(null);
   const [manuscriptView, setManuscriptView] = useState<ManuscriptPanel>(() => window.matchMedia('(max-width: 680px)').matches ? 'pdf' : 'task');
+  // Without a task, the main area shows the manuscript or a tool from the
+  // sidebar's More menu, such as the reference check.
+  const [page, setPage] = useState<'manuscript' | 'references'>('manuscript');
   const [region, setRegion] = useState(false);
   const [activeNote, setActiveNote] = useState('');
   const [noteGroup, setNoteGroup] = useState<NoteGroup | null>(null);
@@ -1085,7 +1089,8 @@ function App() {
     if (next === null) return;
     event.preventDefault(); setChatWidth(Math.min(Math.max(next, 300), max));
   }
-  const manuscriptOpen = !task && Boolean(project);
+  const manuscriptOpen = !task && Boolean(project) && page === 'manuscript';
+  const referencesOpen = !task && Boolean(project) && page === 'references';
   const loadManuscript = useCallback(async (projectId: string, rebuild = false) => {
     // A background read must not replace the result of an in-flight compile.
     if (manuscriptBuildRequests.current.has(projectId)) return;
@@ -1145,6 +1150,15 @@ function App() {
   const projectSkills = skills.projectId === project?.id ? skills.list : [];
   const updateGit = (projectId: string, status: GitStatus) => { setGit({ projectId, status }); setManuscript(current => current.projectId === projectId && current.data ? { ...current, data: { ...current.data, git: status } } : current); };
   const manuscriptData = manuscript.projectId === project?.id ? manuscript : { data: null, error: '' };
+  // The reference check reads the bibliography while it is open, again when
+  // the working tree changes; the sidebar keeps its last count.
+  const bibliography = useBibliography(project?.id || '', JSON.stringify(projectGit?.files?.map(file => [file.path, file.lines]) || []), api, referencesOpen);
+  const problems = problemCount(bibliography.report);
+  // An agent looks into the problems as a new task the author can edit first.
+  const draftInvestigation = (text: string) => {
+    setNewDraft(current => current.trim() ? current.trimEnd() + '\n\n' + text : text);
+    setSelected(''); setPage('manuscript'); setManuscriptView('task'); setRegion(false);
+  };
   const notes = manuscriptData.data?.annotations || [];
   const noteSelection = useNoteSelection(project?.id || '', notes);
   const groupDrafts = useGroupInstructions(project?.id || '');
@@ -1344,7 +1358,10 @@ function App() {
         <button className="icon-button" aria-label={t('Hide task list')} title={t('Hide task list')} onClick={hideSidebar}><Icon name={narrow ? 'close' : 'sidebar'} size={18}/></button>
       </div>
       <div className="sidebar-actions">
-        {project && <button className={'nav-link manuscript-link' + (manuscriptOpen ? ' active' : '')} aria-current={manuscriptOpen ? 'page' : undefined} onClick={() => { setSelected(''); if (mobile) setManuscriptView('pdf'); setSidebar(false); }}><Icon name="pdf" size={16}/><span className="nav-label">{t('Manuscript')}</span>{gitSummary(projectGit) && <span className="nav-meta" title={t('Git status of the manuscript')}>{gitSummary(projectGit)}</span>}</button>}
+        {project && <button className={'nav-link manuscript-link' + (manuscriptOpen ? ' active' : '')} aria-current={manuscriptOpen ? 'page' : undefined} onClick={() => { setSelected(''); setPage('manuscript'); if (mobile) setManuscriptView('pdf'); setSidebar(false); }}><Icon name="pdf" size={16}/><span className="nav-label">{t('Manuscript')}</span>{gitSummary(projectGit) && <span className="nav-meta" title={t('Git status of the manuscript')}>{gitSummary(projectGit)}</span>}</button>}
+        {project && <ActionMenu label={t('More')} className={'nav-link more-link' + (referencesOpen ? ' active' : '')} menuClassName="more-menu" align="side" actions={[
+          { id: 'references', label: t('Reference check'), icon: 'checklist', detail: t('Citations, entries and their records'), hint: problems ? String(problems) : undefined, checked: referencesOpen || undefined, select: () => { setSelected(''); setPage('references'); setSidebar(false); } },
+        ]}><Icon name="more" size={16}/><span className="nav-label">{t('More')}</span>{referencesOpen ? <span className="nav-meta">{t('Reference check')}</span> : null}<Icon name="chevronRight" size={13}/></ActionMenu>}
       </div>
       <div className="task-list-tools" role="group" aria-label={showArchived ? t('Archived tasks') : t('Tasks')}>
         <div className="task-search"><Icon name="search" size={14}/><input type="search" aria-label={t('Search tasks')} placeholder={showArchived ? t('Search archived tasks…') : t('Search tasks…')} title={t('Search task titles and instructions')} value={taskSearch} onChange={event => setTaskSearch(event.target.value)} onKeyDown={event => { if (event.key === 'Escape' && taskSearch) { event.preventDefault(); event.stopPropagation(); setTaskSearch(''); } }}/>{taskSearch && <button type="button" className="icon-button" aria-label={t('Clear task search')} onClick={() => { setTaskSearch(''); document.querySelector<HTMLInputElement>('.task-search input')?.focus(); }}><Icon name="close" size={13}/></button>}</div>
@@ -1375,13 +1392,13 @@ function App() {
           </div>}
           {state && owner && <UpdateNotice api={api} version={state.version}/>}
         </div>
-        <a href="/" className="brand" aria-label="Papilot" onClick={e => { e.preventDefault(); setSelected(''); if (mobile) setManuscriptView('pdf'); setSidebar(false); }}><img className="brand-mark" src={logo} alt=""/><span>Papilot</span>{state && <span className="brand-version" title={t('Papilot {version}', { version: state.version })}>v{versionLabel(state.version)}</span>}</a>
+        <a href="/" className="brand" aria-label="Papilot" onClick={e => { e.preventDefault(); setSelected(''); setPage('manuscript'); if (mobile) setManuscriptView('pdf'); setSidebar(false); }}><img className="brand-mark" src={logo} alt=""/><span>Papilot</span>{state && <span className="brand-version" title={t('Papilot {version}', { version: state.version })}>v{versionLabel(state.version)}</span>}</a>
         <button type="button" className="icon-button settings-link" aria-label={t('Settings')} title={t('Settings')} aria-haspopup="dialog" onClick={() => setSettings('general')}><Icon name="settings" size={18}/></button>
       </div>
     </aside>
     {sidebar && narrow && <button tabIndex={-1} className="sidebar-scrim" aria-label={t('Close task list')} onClick={() => setSidebar(false)}/>}
     <main className="main" inert={narrow && sidebar}>
-      <h1 className="sr-only">{task ? task.title : manuscriptOpen ? t('Manuscript') : 'Papilot'}</h1>
+      <h1 className="sr-only">{task ? task.title : manuscriptOpen ? t('Manuscript') : referencesOpen ? t('Reference check') : 'Papilot'}</h1>
       <span className="sr-only" role="status" aria-atomic="true">{addedTask ? t('Task added: {title}', { title: addedTask.title }) : ''}</span>
       {(mobile || (!task && !manuscriptOpen)) && (sidebarToggle || task || manuscriptOpen) && <div className="workspace-navigation">
         {sidebarToggle}{taskControls}{manuscriptNavigation}{reviewOpen}
@@ -1396,6 +1413,10 @@ function App() {
           {!chatOnly && reviewFeedback(false)}
         </section><Activity key={task.id} task={task} lead={!mobile && chatOnly ? sidebarToggle : null} tools={!mobile && conversationVisible ? <>{taskControls}{reviewOpen}</> : null} connection={<AgentConnectionNotice name={agentName(task)} runtime={runtimes[task.agent || 'codex']} reconnecting={pendingActions.has('/reconnect')} onReconnect={() => void action('/reconnect')}/>} models={runtimes[task.agent || 'codex']?.models || []} composer={composers.current.get(task.id)!} answerDrafts={answerDrafts.current} items={timeline.taskId === task.id ? timeline.items : timelineCache.current.get(task.id) || []} loading={timeline.taskId === task.id ? itemsLoading : !timelineCache.current.has(task.id)} loadError={timelineError.taskId === task.id ? timelineError.message : ''} retry={() => void refreshTimeline(task.id)} requests={state?.requests.filter(r => r.taskId === task.id) || []} refresh={() => void refresh(true)} reportError={reportError} pause={pause} pausing={taskActionBusy} skills={projectSkills} feedback={chatOnly ? <>{reviewFeedback(true)}{commitStep && <div className="review-feedback card commit-card task-delivery">{commitStep}</div>}</> : null} openReview={chatOnly ? () => { setMobileTab('review'); setLayout(current => current === 'conversation' ? 'split' : current); } : undefined}/></div>
       : manuscriptOpen && project ? <ManuscriptView key={project.id + project.path} tasks={state?.tasks.filter(task => task.projectId === project.id) || []} onOpenTask={id => { setSelected(id); setSidebar(false); }} navigation={!mobile ? sidebarToggle : null} project={project} data={manuscriptData.data} error={manuscriptData.error} view={manuscriptView} setView={setManuscriptView} region={region} setRegion={setRegion} active={activeNote} setActive={setActiveNote} actions={noteActions} newTask={newTaskPanel} tools={!mobile ? manuscriptTools : null} openPdf={!mobile ? manuscriptOpenPdf : null} onGit={status => updateGit(project.id, status)} writer={{ agent: agent.agent, model: agent.model }} reportError={reportError}/>
+      : referencesOpen && project ? <section className="references-page" aria-label={t('Reference check')}>
+          <header className="references-page-head"><h2>{t('Reference check')}</h2><span>{project.name}</span></header>
+          <ReferencesPanel data={bibliography} onInvestigate={draftInvestigation}/>
+        </section>
       : !state ? <div className="home"><div className="home-inner"><div className="home-mark"><span className="spinner"/></div><h1>{t('Opening your workspace')}</h1><p className="home-copy" role="status">{connectionError || t('Connecting to your papers and tasks…')}</p>{connectionError && <button className="button secondary" onClick={() => void refresh(true)}>{t('Retry connection')}</button>}</div></div>
       : !owner ? <div className="home"><div className="home-inner"><img className="home-logo" src={logo} alt=""/><h1>{t('No papers yet')}</h1><p className="home-copy">{t('No papers have been shared with you yet. Papers appear here as soon as {name} shares them.', { name: viewer?.owner || '' })}</p></div></div>
       : <div className="home"><div className="home-inner"><img className="home-logo" src={logo} alt=""/><h1>{t('Add your first paper')}</h1><button className="button primary" onClick={() => openProject()}><Icon name="plus" size={16}/>{t('Add paper')}</button></div></div>}

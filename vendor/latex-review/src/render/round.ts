@@ -3,6 +3,7 @@ import path from "node:path";
 import { readJson, writeJson } from "../core/files.ts";
 import { within } from "../core/git.ts";
 import { deepestNode } from "../core/outline.ts";
+import { referenceChanges } from "../core/bib.ts";
 import { changesOf, placesOf, renderPlace } from "./effects.ts";
 import { Build } from "./locate.ts";
 import { renderSection, snap, Strips } from "./inline.ts";
@@ -54,8 +55,11 @@ export function classify(
     /\\(?:verb\b|lstinline\b|mintinline\b|begin\{(?:verbatim\*?|Verbatim|lstlisting|minted)\})/.test(
       (old.read(name) ?? "") + (next.read(name) ?? ""),
     );
+  // A .bib file is not typeset where it is written, and % in a URL is not
+  // a comment there: its edits are compared in the PDF.
   if (
     unit.kind !== "binary" &&
+    !name.endsWith(".bib") &&
     !whitespaceSensitive &&
     !unit.truncated &&
     unit.status === "modified" &&
@@ -286,6 +290,13 @@ export function renderRound(
       if (!placed.has(index))
         result.loose.push(looseBlock(card, strips, old, next));
     });
+    try {
+      const references = referenceChanges(request.units, old, next);
+      if (references) result.references = references;
+    } catch (error) {
+      // The PDF review stands without the bibliography's entry view.
+      console.error("Could not read the bibliography changes:", error);
+    }
     fs.writeFileSync(path.join(out, "round.json"), JSON.stringify(result));
     return result;
   } finally {

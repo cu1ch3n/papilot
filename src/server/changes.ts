@@ -5,6 +5,7 @@ import { pathToFileURL } from 'node:url';
 import { DATA, ENGINE } from './paths.ts';
 import { mergeInProgress, workingTree } from './manuscript.ts';
 import { ignorePattern } from '../commit.ts';
+import { checker, confirmations, engine as referenceEngine } from './references.ts';
 
 // The manuscript's uncommitted changes as a PDF comparison: the last commit
 // against the working tree, rendered by the review engine like a task's round
@@ -197,13 +198,35 @@ export class Changes {
   detail(projectId: string, number: number) {
     const round = this.comparison(projectId).rounds.find(item => item.number === number);
     if (!round) throw Object.assign(new Error('This comparison is out of date. Refresh the page.'), { statusCode: 404 });
-    let render: { units: Record<string, object>; sections: unknown[]; loose: unknown[] } = { units: {}, sections: [], loose: [] };
-    try { render = JSON.parse(fs.readFileSync(path.join(round.folder, 'round.json'), 'utf8')); } catch { /* An empty comparison has no render. */ }
+    const render = this.rendered(round);
     return {
       task: 'changes', round: round.number, before: round.before, after: round.after,
       units: round.units.map(unit => ({ ...unit, ...render.units[unit.id] })), sections: render.sections, loose: render.loose,
       warnings: round.warnings, files: `/review/${projectId}/changes/files/${round.number}/`,
+      ...(render.references ? { references: render.references } : {}),
     };
+  }
+  private rendered(round: Round): { units: Record<string, object>; sections: unknown[]; loose: unknown[]; references?: unknown } {
+    try { return JSON.parse(fs.readFileSync(path.join(round.folder, 'round.json'), 'utf8')); } catch { return { units: {}, sections: [], loose: [] }; } // An empty comparison has no render.
+  }
+
+  // Online checks of the bibliography entries the uncommitted changes add or
+  // modify, as for a task's round; check asks for lookups to start.
+  async references(projectId: string, root: string, number: number, check: boolean, retry: boolean) {
+    const inputs = await this.entryInputs(projectId, number);
+    return { ...(await checker()).lookup(inputs, check, retry), confirmed: (await confirmations(root)).of(inputs) };
+  }
+  // The author checked an entry by hand, or takes that back.
+  async confirmReference(projectId: string, root: string, number: number, id: string, on: boolean) {
+    const inputs = await this.entryInputs(projectId, number), input = inputs.find(item => item.id === id);
+    if (!input) throw Object.assign(new Error('This entry is no longer among the changes. Refresh the page.'), { statusCode: 404 });
+    (await confirmations(root)).set(input, on);
+    return this.references(projectId, root, number, false, false);
+  }
+  private async entryInputs(projectId: string, number: number) {
+    const round = this.comparison(projectId).rounds.find(item => item.number === number);
+    if (!round) throw Object.assign(new Error('This comparison is out of date. Refresh the page.'), { statusCode: 404 });
+    return (await referenceEngine()).checkInputs(this.rendered(round).references);
   }
 
   // The places a change alters away from its own lines, past those the

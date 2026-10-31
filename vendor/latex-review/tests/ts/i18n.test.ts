@@ -22,7 +22,7 @@ function keys() {
       for (const [, text] of call[1].matchAll(/"((?:[^"\\]|\\.)*)"/g))
         found.add(text);
     for (const map of source.matchAll(
-      /const (?:KIND|PHASE|ACTION|CHANGE_ACTION|CHANGE_STATE)\b[^{]*\{([^}]*)\}/g,
+      /const (?:KIND|PHASE|ACTION|CHANGE_ACTION|CHANGE_STATE|FIELD|ENTRY_STATUS|CHECK|PROBLEM)\b[^{]*\{([^}]*)\}/g,
     ))
       for (const [, text] of map[1].matchAll(/:\s*"([^"]*)"/g))
         found.add(text);

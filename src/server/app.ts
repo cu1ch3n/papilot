@@ -11,6 +11,7 @@ import type { Workspace } from './workspace.ts';
 import { reviewClient, allowedReviewRoute, rewriteReviewHtml, rewriteReviewJson, confirmedReviewResponse, annotateReviewState } from './review.ts';
 import { fullPaperPdf } from './pdf.ts';
 import { type ChangeAction, Changes } from './changes.ts';
+import { bibliography, confirmEntry } from './references.ts';
 import { type Manuscripts, annotationTask, gitAbortMerge, gitCommit, gitDiff, gitFinishMerge, gitIgnore, gitRemote, gitStage, gitStatus } from './manuscript.ts';
 import { gitOverview } from './git-overview.ts';
 import { findSkill, listedSkill, loadSkills } from './skills.ts';
@@ -263,6 +264,14 @@ export async function buildApp(options: AppOptions) {
   // The manuscript preview compiles each paper's working tree and reports its Git status.
   app.get<{ Params: { id: string } }>('/api/projects/:id/manuscript', project(), request => manuscript(request.params.id));
   app.get<{ Params: { id: string } }>('/api/projects/:id/git', project(), request => gitStatus(store.project(request.params.id).path));
+  // The paper's bibliography: every entry, its problems and its online check.
+  app.get<{ Params: { id: string }; Querystring: { check?: string; retry?: string } }>('/api/projects/:id/references', project(), request =>
+    bibliography(store.project(request.params.id).path, request.query.check === '1', request.query.retry === '1'));
+  app.post<{ Params: { id: string } }>('/api/projects/:id/references/confirm', project(), request => {
+    const b = request.body as any;
+    if (typeof b?.id !== 'string' || typeof b?.confirmed !== 'boolean') throw new Error('Choose an entry to confirm.');
+    return confirmEntry(store.project(request.params.id).path, b.id, b.confirmed);
+  });
   app.get<{ Params: { id: string } }>('/api/projects/:id/git/overview', project(), request => gitOverview(store.project(request.params.id).path, store.tasks().filter(task => task.projectId === request.params.id)));
   app.get<{ Params: { id: string }; Querystring: { path?: string } }>('/api/projects/:id/git/diff', project(), request => gitDiff(store.project(request.params.id).path, string(request.query.path, 'File path', 4096)));
   const paths = (value: unknown): string[] => Array.isArray(value) ? value.filter((p: unknown): p is string => typeof p === 'string').slice(0, 5000) : [];
@@ -424,6 +433,16 @@ export async function buildApp(options: AppOptions) {
   app.get<{ Params: { projectId: string; number: string } }>('/review/:projectId/api/changes/rounds/:number', changesAccess, request => changes.detail(store.project(request.params.projectId).id, Number(request.params.number)));
   app.get<{ Params: { projectId: string; number: string; unit: string } }>('/review/:projectId/api/changes/rounds/:number/effects/:unit', changesAccess, request =>
     changes.effects(store.project(request.params.projectId).id, Number(request.params.number), request.params.unit));
+  app.get<{ Params: { projectId: string; number: string }; Querystring: { check?: string; retry?: string } }>('/review/:projectId/api/changes/rounds/:number/references', changesAccess, request => {
+    const project = store.project(request.params.projectId);
+    return changes.references(project.id, project.path, Number(request.params.number), request.query.check === '1', request.query.retry === '1');
+  });
+  app.post<{ Params: { projectId: string; number: string } }>('/review/:projectId/api/changes/rounds/:number/references/confirm', changesAccess, request => {
+    changesToken(request);
+    const project = store.project(request.params.projectId), b = request.body as any;
+    if (typeof b?.id !== 'string' || typeof b?.confirmed !== 'boolean') throw new Error('Choose an entry to confirm.');
+    return changes.confirmReference(project.id, project.path, Number(request.params.number), b.id, b.confirmed);
+  });
   app.get<{ Params: { projectId: string; number: string; file: string } }>('/review/:projectId/changes/files/:number/:file', changesAccess, (request, reply) => {
     const file = changes.file(store.project(request.params.projectId).id, Number(request.params.number), request.params.file);
     return reply.header('Cache-Control', 'private, max-age=31536000, immutable').type(file.endsWith('.svg') ? 'image/svg+xml' : 'image/png').send(fs.createReadStream(file));
@@ -472,7 +491,7 @@ export async function buildApp(options: AppOptions) {
             const task = store.tasks().find(t => t.projectId === project.id && t.name === route.split('/')[3]);
             if (task) store.updateTask(task.id, { error: 'Review action failed: ' + (value as any).error });
           }
-          if (response.ok && request.method === 'POST') {
+          if (response.ok && request.method === 'POST' && !route.endsWith('/references/confirm')) {
             const task = store.tasks().find(t => t.projectId === project.id && t.name === route.split('/')[3]);
             if (task) {
               store.updateTask(task.id, { error: null });

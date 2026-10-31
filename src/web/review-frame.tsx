@@ -33,6 +33,10 @@ function compactReviewFrame(doc: Document, reserve: number, lead: number, change
     .source-code del{background:var(--red-soft);color:var(--red)}
     .source-code ins{background:var(--green-soft);color:var(--green)}
     .remark{background:var(--accent-soft)}.histories,.caption{background:var(--bg-subtle);color:var(--text-2)}
+    /* Bibliography entries and their checks follow the theme. */
+    :root{--ok-soft:var(--green-soft);--bad-soft:var(--red-soft);--warn:var(--amber-text);--warn-soft:var(--amber-soft);--warn-line:var(--amber-line)}
+    .references,.reference-entry{background:var(--bg);color:var(--text)}
+    .reference-fields th,.reference-status,.reference-lines,.reference-cited,.reference-side,.reference-resolved{color:var(--text-3)}
     .toast.error{background:var(--red-soft);color:var(--red)}
     /* Papilot's commit step at the end of the completion card. */
     .review-complete{align-items:center}

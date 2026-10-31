@@ -14,6 +14,7 @@ import { Deliveries } from "./core/delivery.ts";
 import { more, PublishError, Publisher } from "./core/publish.ts";
 import { acquireLock, now, readJson, writeJson } from "./core/files.ts";
 import { stopAll } from "./core/process.ts";
+import { checkInputs, Confirmations, ReferenceChecker } from "./core/verify.ts";
 import type { ActionKind } from "./types.ts";
 export class App {
   root: string;
@@ -28,6 +29,8 @@ export class App {
   review: Review;
   delivery: Deliveries;
   publisher: Publisher;
+  references: ReferenceChecker;
+  confirmations: Confirmations;
   private cachedProject?: Project;
   private stamp?: number;
   constructor(root: string) {
@@ -39,6 +42,12 @@ export class App {
     this.review = new Review(this);
     this.delivery = new Deliveries(this);
     this.publisher = new Publisher(this);
+    this.references = new ReferenceChecker(
+      path.join(this.state, "references.json"),
+    );
+    this.confirmations = new Confirmations(
+      path.join(this.state, "references-confirmed.json"),
+    );
     this.review.recover();
     this.delivery.recover();
   }
@@ -208,6 +217,55 @@ export function createServer(app: App) {
             .code(409)
             .send({ error: `${error.message} ${error.next}`.trim() });
         }
+      },
+    );
+    // Checks of the bibliography entries a round adds or modifies. The page
+    // asks with check=1 to look up entries online, and keeps asking until
+    // none is pending; without it only results already known are returned.
+    server.get<{
+      Params: { name: string; number: string };
+      Querystring: { check?: string; retry?: string };
+    }>("/api/tasks/:name/rounds/:number/references", (request) => {
+      const inputs = checkInputs(
+        app.review.roundDetail(request.params.name, Number(request.params.number))
+          .references,
+      );
+      return {
+        ...app.references.lookup(
+          inputs,
+          request.query.check === "1",
+          request.query.retry === "1",
+        ),
+        confirmed: app.confirmations.of(inputs),
+      };
+    });
+    // The author confirms, or takes back, that they checked an entry by hand.
+    server.post<{
+      Params: { name: string; number: string };
+      Body: { id: string; confirmed: boolean };
+    }>(
+      "/api/tasks/:name/rounds/:number/references/confirm",
+      {
+        schema: {
+          body: {
+            ...{ type: "object" as const },
+            required: ["id", "confirmed"],
+            properties: { id: { type: "string" }, confirmed: { type: "boolean" } },
+          },
+        },
+      },
+      (request, reply) => {
+        const inputs = checkInputs(
+            app.review.roundDetail(request.params.name, Number(request.params.number))
+              .references,
+          ),
+          input = inputs.find((i) => i.id === request.body.id);
+        if (!input) return reply.code(404).send({ error: "No such entry in this round." });
+        app.confirmations.set(input, request.body.confirmed);
+        return {
+          ...app.references.lookup(inputs),
+          confirmed: app.confirmations.of(inputs),
+        };
       },
     );
     server.get<{ Params: { name: string; number: string; file: string } }>(

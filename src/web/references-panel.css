@@ -1,0 +1,72 @@
+/* The References panel beside the PDF: a summary with the online check,
+   the problems to act on, every entry on request, and a task for an agent. */
+.references-panel{flex:1;min-height:0;overflow:auto;display:flex;flex-direction:column;font-size:13px;line-height:1.5}
+.references-summary{padding:12px 14px 10px;border-bottom:1px solid var(--line)}
+.references-summary>p{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 10px;margin:0}
+.references-stat{font-size:12px;color:var(--text-2)}
+.references-stat.s-verified,.references-stat.s-confirmed{color:var(--green)}
+.references-stat.s-mismatch{color:var(--red)}
+.references-stat.s-unverified,.references-stat.s-failed{color:var(--amber-text)}
+.references-actions{display:flex;align-items:center;gap:8px;margin-top:8px}
+.references-progress{display:inline-flex;align-items:center;gap:8px;color:var(--text-2)}
+.references-note{margin:8px 0 0;font-size:12px;color:var(--text-3)}
+.references-filter{display:flex;gap:2px;padding:8px 10px;border-bottom:1px solid var(--line)}
+.references-filter>button{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px;border-radius:var(--r);font-size:13px;font-weight:500;color:var(--text-2)}
+.references-filter>button:hover{background:var(--bg-hover);color:var(--text)}
+.references-filter>button[aria-selected=true]{background:var(--bg-muted);color:var(--text)}
+.references-filter .count{font-size:11.5px;color:var(--text-3)}
+.references-list{list-style:none;margin:0;padding:4px 0;flex:1}
+.references-item{border-bottom:1px solid var(--line)}
+.references-item[data-open=true]{background:var(--bg-subtle)}
+.references-row{display:flex;align-items:flex-start;gap:8px;padding-left:12px}
+.references-row>input{margin-top:11px;flex-shrink:0}
+.references-head{display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 8px;width:100%;min-width:0;padding:8px 12px;text-align:left;color:var(--text)}
+.references-row .references-head{padding-left:0}
+.references-head:hover:not(:disabled){background:var(--bg-hover)}
+.references-head:disabled{opacity:1;cursor:default}
+.references-head code{font-size:12.5px;font-weight:600;overflow-wrap:anywhere}
+.references-state{font-size:11.5px;font-weight:600;padding:0 7px;border-radius:999px;background:var(--bg-muted);color:var(--text-2);white-space:nowrap}
+.references-state.s-verified,.references-state.s-confirmed{background:var(--green-soft);color:var(--green)}
+.references-state.s-mismatch{background:var(--red-soft);color:var(--red)}
+.references-state.s-unverified,.references-state.s-failed,.references-state.s-skipped,.references-state.s-checking{background:var(--amber-soft);color:var(--amber-text)}
+.references-problems{flex-basis:100%;color:var(--red);font-size:12.5px}
+.references-item[data-state=unverified] .references-problems,.references-item[data-state=failed] .references-problems{color:var(--amber-text)}
+.references-item.soft .references-problems{color:var(--text-3)}
+.references-title{flex-basis:100%;color:var(--text);overflow-wrap:anywhere}
+.references-meta{flex-basis:100%;font-size:12px;color:var(--text-3)}
+.references-detail{padding:2px 14px 12px 14px}
+.references-row+.references-detail{padding-left:36px}
+.references-detail table{width:100%;border-collapse:collapse;font:12px/1.55 var(--mono,ui-monospace,SFMono-Regular,Menlo,monospace)}
+.references-detail th{width:1%;padding:1px 10px 1px 0;text-align:left;vertical-align:top;font-weight:400;color:var(--text-3);white-space:nowrap}
+.references-detail td{padding:1px 0;overflow-wrap:anywhere}
+.references-resolved{color:var(--text-3)}
+.references-where,.references-record,.references-confirmed{margin:8px 0 0;font-size:12px;color:var(--text-2);overflow-wrap:anywhere}
+.references-record>span:first-child{margin-right:6px;color:var(--text-3)}
+.references-record a{color:var(--accent)}
+.references-differences{margin:8px 0 0;display:grid;gap:6px}
+.references-differences>div{display:grid;grid-template-columns:auto 1fr;gap:0 10px}
+.references-differences dt{font-weight:600;white-space:nowrap}
+.references-differences dd{margin:0;display:grid;min-width:0;overflow-wrap:anywhere}
+.references-differences dd>span:first-child{color:var(--red)}
+.references-differences dd>span:last-child{color:var(--text-2)}
+.references-detail>.button{margin-top:10px}
+.references-confirmed{display:flex;align-items:center;gap:6px;color:var(--green)}
+.references-empty{display:flex;align-items:center;gap:6px;margin:14px;color:var(--text-2)}
+.references-fix{position:sticky;bottom:0;display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;padding:10px 14px;border-top:1px solid var(--line);background:var(--bg)}
+.references-fix>span{font-size:12px;color:var(--text-3)}
+@media(max-width:480px){.references-differences>div{grid-template-columns:1fr}}
+/* More in the sidebar, under Manuscript: a row that opens its tools beside it. */
+.sidebar-actions>.menu-anchor{display:flex}
+.more-link{min-height:32px;gap:8px;font-weight:400;color:var(--text-2)}
+.more-link>svg:last-child{margin-left:auto;color:var(--text-3)}
+.more-link.active{color:var(--text)}
+.more-link .nav-meta+svg{margin-left:6px}
+.more-menu{min-width:240px}
+/* The reference check as a page: the panel, centred at a reading width. */
+.references-page{flex:1;min-height:0;display:flex;flex-direction:column;width:100%;max-width:820px;margin:0 auto;padding:0 8px}
+.references-page-head{display:flex;align-items:baseline;gap:10px;padding:18px 14px 6px}
+.references-page-head h2{margin:0;font:600 18px/1.3 var(--sans)}
+.references-page-head span{font-size:13px;color:var(--text-3)}
+.references-page .references-panel{border:1px solid var(--line);border-radius:12px;background:var(--bg);margin-bottom:16px}
+.references-page .references-fix{border-radius:0 0 12px 12px}
+@media(max-width:680px){.references-page{padding:0}.references-page .references-panel{border:0;border-radius:0;margin:0}.references-page-head{padding:12px 14px 4px}}

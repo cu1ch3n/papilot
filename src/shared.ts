@@ -113,3 +113,20 @@ export interface PaperImport {
   phase: 'choose' | 'building' | 'failed' | 'ready' | 'repairing';
   error?: string; summary?: string; versioned?: boolean;
 }
+// The paper's bibliography as the References panel reads it: the review
+// engine's report of every entry, with online checks and the entries the
+// author checked by hand.
+export interface ReferenceCitation { file: string; line: number; section: string | null }
+export interface ReferenceRecord { source: 'doi' | 'crossref' | 'arxiv' | 'dblp'; title: string; authors: string[]; year: number | null; venue: string | null; doi: string | null; url: string }
+export interface ReferenceCheck {
+  status: 'verified' | 'mismatch' | 'unverified' | 'failed' | 'skipped';
+  record?: ReferenceRecord; via: 'doi' | 'arxiv' | 'title' | null;
+  differences: { field: 'title' | 'author' | 'year' | 'doi' | 'arxiv'; bib: string; record: string; minor?: boolean }[];
+  reason?: 'doi-not-found' | 'arxiv-not-found' | 'no-match' | 'nothing-to-check'; unavailable: string[]; checked: number;
+}
+export interface BibliographyEntry { id: string; file: string; key: string; type: string; fields: { name: string; value: string; resolved?: string }[]; lines: [number, number]; cited: ReferenceCitation[]; error?: string }
+export interface BibliographyReport {
+  bibs: string[]; absent: string[]; entries: BibliographyEntry[];
+  missing: (ReferenceCitation & { key: string })[]; duplicates: string[][]; similar: { ids: string[]; by: 'doi' | 'title' }[]; all_cited: boolean;
+  checks: Record<string, ReferenceCheck>; pending: number; confirmed: Record<string, number>;
+}

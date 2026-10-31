@@ -6,7 +6,9 @@ export interface MenuAction { id?: string; label: string; title?: string; detail
 // Native popovers escape scrolling containers and handle outside clicks without
 // making the rest of the workspace modal. Each menu keeps its own task identity.
 // The trigger defaults to a "more" button; pass children for a labelled trigger.
-export function ActionMenu({ label, actions, children, className = 'icon-button more-button', menuClassName = '', align = 'end', disabled }: { label: string; actions: MenuAction[]; children?: ReactNode; className?: string; menuClassName?: string; align?: 'start' | 'end'; disabled?: boolean }) {
+// A side menu opens beside its trigger, as a submenu does, and the arrow
+// keys toward and away from it open and close it.
+export function ActionMenu({ label, actions, children, className = 'icon-button more-button', menuClassName = '', align = 'end', disabled }: { label: string; actions: MenuAction[]; children?: ReactNode; className?: string; menuClassName?: string; align?: 'start' | 'end' | 'side'; disabled?: boolean }) {
   const id = useId();
   const trigger = useRef<HTMLButtonElement>(null);
   const menu = useRef<HTMLDivElement>(null);
@@ -22,6 +24,12 @@ export function ActionMenu({ label, actions, children, className = 'icon-button 
   }, [open]);
   function position() {
     const panel = menu.current!, rect = trigger.current!.getBoundingClientRect();
+    if (align === 'side') {
+      const right = rect.right + 6, left = rect.left - panel.offsetWidth - 6;
+      panel.style.left = `${right + panel.offsetWidth <= window.innerWidth - 8 || left < 8 ? Math.max(8, Math.min(right, window.innerWidth - panel.offsetWidth - 8)) : left}px`;
+      panel.style.top = `${Math.max(8, Math.min(rect.top - 5, window.innerHeight - panel.offsetHeight - 8))}px`;
+      return;
+    }
     if (align === 'start') panel.style.minWidth = `${rect.width}px`;
     const left = align === 'start' ? rect.left : rect.right - panel.offsetWidth;
     panel.style.left = `${Math.max(8, Math.min(left, window.innerWidth - panel.offsetWidth - 8))}px`;
@@ -41,6 +49,7 @@ export function ActionMenu({ label, actions, children, className = 'icon-button 
       event.preventDefault(); if (menu.current?.matches(':popover-open')) close(); else show();
     }} onKeyDown={event => {
       if (event.key === 'ArrowDown' || event.key === 'ArrowUp') { event.preventDefault(); show(event.key === 'ArrowUp'); }
+      else if (align === 'side' && event.key === 'ArrowRight') { event.preventDefault(); show(); }
     }}>{children || <Icon name="more" size={18}/>}</button>
     <div ref={menu} id={id} popover="auto" role="menu" aria-label={label} className={'action-menu ' + menuClassName} onToggle={event => {
       const shown = (event.nativeEvent as ToggleEvent).newState === 'open'; setOpen(shown);
@@ -49,7 +58,7 @@ export function ActionMenu({ label, actions, children, className = 'icon-button 
       // must receive Tab so its focus boundary can wrap the final row safely.
       if (event.key === 'Tab') { close(); trigger.current?.focus(); return; }
       event.stopPropagation();
-      if (event.key === 'Escape') { event.preventDefault(); close(); trigger.current?.focus(); }
+      if (event.key === 'Escape' || (align === 'side' && event.key === 'ArrowLeft')) { event.preventDefault(); close(); trigger.current?.focus(); }
       else if (['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) {
         event.preventDefault(); const items = choices(), current = items.indexOf(document.activeElement as HTMLElement);
         const index = event.key === 'Home' ? 0 : event.key === 'End' ? items.length - 1 : (current + (event.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length;

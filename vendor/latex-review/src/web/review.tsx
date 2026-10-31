@@ -19,7 +19,14 @@ import type {
 import { PdfStrip } from "./PdfStrip.tsx";
 import { ChangeMap } from "./ChangeMap.tsx";
 import { STATUS } from "./overview.tsx";
-import { locale, t, tn, withLanguage } from "./i18n.ts";
+import { language, locale, t, tn, withLanguage } from "./i18n.ts";
+import {
+  ConfirmReferences,
+  ReferenceBanner,
+  ReferenceEntries,
+  risks,
+  useReferenceChecks,
+} from "./references.tsx";
 import { bindingLabel, readShortcuts, resolveShortcuts, shortcutAction, SHORTCUT_EVENT, SHORTCUT_STORAGE } from "./shortcuts.ts";
 import {
   STATE,
@@ -137,6 +144,13 @@ export function ReviewApp({
       Record<string, PlaceView[] | "loading" | { error: string }>
     >({}),
     [composer, setComposer] = useState<Composer | null>(null),
+    // Accepting bibliography entries that are not verified waits for this.
+    [confirm, setConfirm] = useState<{
+      kind: Kind;
+      chosen: string[];
+      body: string;
+      items: { label: string; reasons: string[] }[];
+    } | null>(null),
     [draft, setDraft] = useState(""),
     [help, setHelp] = useState(false),
     // A note can reveal a decided change without opening the history controls.
@@ -191,6 +205,13 @@ export function ReviewApp({
     undecided = Object.keys(decisions).filter(
       (id) => decisions[id] === "pending",
     ),
+    references = useReferenceChecks(detail, api),
+    hazards = useMemo(
+      () => risks(detail?.references, references.checks, references.pending, references.confirmed),
+      [detail, references.checks, references.pending, references.confirmed],
+    ),
+    // Batch acceptance leaves the changes whose entries need a look.
+    batch = undecided.filter((id) => !hazards.has(id)),
     latest = Boolean(
       detail && state && detail.round === state.latest && !state.closed,
     ),
@@ -198,6 +219,9 @@ export function ReviewApp({
     label = (kind: string) => t((changes ? CHANGE_ACTION : ACTION)[kind] ?? kind),
     stateLabel = (value: string) =>
       t((changes ? CHANGE_STATE : STATE)[value] ?? value);
+  // Keyboard handlers read the newest checks, not those of their render.
+  const hazardsNow = useRef(hazards);
+  hazardsNow.current = hazards;
   // What each button acts on: undecided changes, or in changes mode the
   // staged ones for Unstage and every change still on disk for Revert.
   const targets = (units: string[], kind: Kind) =>
@@ -416,6 +440,7 @@ export function ReviewApp({
     kind: Kind,
     chosen = targets(stops[current]?.units ?? [], kind),
     body = "",
+    confirmed = false,
   ) {
     if (
       !chosen.length ||
@@ -425,6 +450,13 @@ export function ReviewApp({
       blocked(kind)
     )
       return;
+    if (kind === "accept" && !confirmed) {
+      const items = chosen.flatMap((id) => hazardsNow.current.get(id) ?? []);
+      if (items.length) {
+        setConfirm({ kind, chosen, body, items });
+        return;
+      }
+    }
     epoch.current++;
     setBusy(true);
     snapshot.current.busy = true;
@@ -538,7 +570,8 @@ export function ReviewApp({
         typing =
           target.matches("input,textarea,select") || target.isContentEditable;
       if (event.key === "Escape") {
-        if (help) setHelp(false);
+        if (confirm) setConfirm(null);
+        else if (help) setHelp(false);
         else if (composer) closeComposer();
         return;
       }
@@ -551,7 +584,7 @@ export function ReviewApp({
         void submitComposer();
         return;
       }
-      if (typing || help || window.getSelection()?.toString()) return;
+      if (typing || help || confirm || window.getSelection()?.toString()) return;
       if ((event.metaKey || event.ctrlKey) && !event.altKey && !event.shiftKey && event.key.toLowerCase() === "z") {
         event.preventDefault();
         void undo();
@@ -576,7 +609,7 @@ export function ReviewApp({
     };
     window.addEventListener("keydown", listener);
     return () => window.removeEventListener("keydown", listener);
-  }, [state, detail, current, busy, composer, draft, help, history, shortcuts]);
+  }, [state, detail, current, busy, composer, draft, help, confirm, history, shortcuts]);
   function onScroll() {
     if (
       !paper.current ||
@@ -778,6 +811,10 @@ export function ReviewApp({
     inline: boolean,
   ): ReactNode {
     const known = block.units.map((id) => units.get(id)!).filter(Boolean),
+      // A .bib edit is shown entry by entry, every field, rather than as
+      // the bibliography's typeset lines alone.
+      bib = detail!.references?.entries.filter((e) => block.units.includes(e.unit)) ?? [],
+      uncited = detail!.references?.missing.filter((m) => m.unit && block.units.includes(m.unit)) ?? [],
       status = stopState(block.units, decisions),
       reviewed = !pendingUnits(stops[index], decisions).length,
       expanded = browsing || index === linkedChange,
@@ -793,15 +830,17 @@ export function ReviewApp({
             (status === "commented" ? "after" : undefined),
       source =
         openSource.has(index) ||
-        block.identical ||
-        (!block.before.length && !block.after.length),
+        (!bib.length &&
+          (block.identical || (!block.before.length && !block.after.length))),
       remarks = [
         ...new Set(
           block.units.map((id) => state?.comments[id]).filter(Boolean),
         ),
       ],
       location = describeLocation(known, t),
-      kindLabel = block.reflow
+      kindLabel = bib.length
+        ? t("Bibliography")
+        : block.reflow
         ? t("Reflow")
         : [
             ...new Set(
@@ -913,7 +952,7 @@ export function ReviewApp({
           block.before.length > 0 &&
           images(block.before, "before")}
         {block.after.length > 0 && images(block.after, "after")}
-        {block.identical && (
+        {block.identical && !bib.length && (
           <p className="caption">
             {t("No visible change in the PDF; see the LaTeX source.")}
           </p>
@@ -932,6 +971,25 @@ export function ReviewApp({
               </p>
             ))}
           </div>
+        )}
+        {uncited.length > 0 && (
+          <p className="reference-problem reference-uncited">
+            {uncited
+              .map((m) => t("Cites {key}, which no bibliography entry defines.", { key: m.key }))
+              .join(language() === "zh-CN" ? "" : " ")}
+          </p>
+        )}
+        {bib.length > 0 && (
+          <ReferenceEntries
+            entries={bib}
+            checks={references.checks}
+            pending={references.pending > 0}
+            onRetry={references.retry}
+            confirmed={references.confirmed}
+            onConfirm={(id, on) =>
+              void references.confirm(id, on).catch((e) => setToast((e as Error).message))
+            }
+          />
         )}
         {source && (
           <div className="source">
@@ -1044,7 +1102,7 @@ export function ReviewApp({
           {/* Batch decisions cover only undecided changes; accepted,
               rejected and commented changes keep their state. A single
               undecided change is decided from its own bar. */}
-          {count.pending > 1 && (
+          {count.pending > 1 && batch.length > 0 && (
             <button
               className="ghost accept accept-all"
               disabled={
@@ -1055,30 +1113,41 @@ export function ReviewApp({
               }
               title={
                 state?.decisionLock ||
-                (changes
-                  ? tn(
-                      count.pending,
-                      "Stage the {n} unstaged change.",
-                      "Stage the {n} unstaged changes.",
-                    )
-                  : tn(
-                      count.pending,
-                      "Accept {n} undecided change",
-                      "Accept {n} undecided changes",
-                    ))
+                [
+                  changes
+                    ? tn(
+                        batch.length,
+                        "Stage the {n} unstaged change.",
+                        "Stage the {n} unstaged changes.",
+                      )
+                    : tn(
+                        batch.length,
+                        "Accept {n} undecided change",
+                        "Accept {n} undecided changes",
+                      ),
+                  undecided.length > batch.length
+                    ? tn(
+                        undecided.length - batch.length,
+                        "Leaves {n} change with bibliography entries to check.",
+                        "Leaves {n} changes with bibliography entries to check.",
+                      )
+                    : "",
+                ]
+                  .filter(Boolean)
+                  .join(" ")
               }
               aria-label={
                 changes
-                  ? t("Stage all ({n})", { n: count.pending })
-                  : t("Accept all ({n})", { n: count.pending })
+                  ? t("Stage all ({n})", { n: batch.length })
+                  : t("Accept all ({n})", { n: batch.length })
               }
               aria-describedby={state?.decisionLock ? "review-lock" : undefined}
-              onClick={() => void decide("accept", undecided)}
+              onClick={() => void decide("accept", batch)}
             >
               <span className="batch-label">
                 {changes ? t("Stage all") : t("Accept all")}
               </span>
-              <span className="batch-count">{count.pending}</span>
+              <span className="batch-count">{batch.length}</span>
             </button>
           )}
           {count.pending > 1 && !changes && (
@@ -1289,6 +1358,19 @@ export function ReviewApp({
               </details>
             </div>
           ) : null}
+          {detail?.references &&
+            (detail.references.entries.length > 0 ||
+              detail.references.missing.length > 0) && (
+              <ReferenceBanner
+                references={detail.references}
+                checks={references.checks}
+                pending={references.pending}
+                confirmed={references.confirmed}
+                changeOf={(unit) => (unit ? (firstStop.get(unit) ?? -1) : -1)}
+                onSelect={(index) => select(index)}
+                onRetry={references.retry}
+              />
+            )}
           {changes && detail && !count.pending && (count.accepted > 0 || !stops.length) && (
             <div className="review-complete" role="status">
               <strong>
@@ -1470,6 +1552,18 @@ export function ReviewApp({
         <div className="toast" role="alert">
           {toast}
         </div>
+      )}
+      {confirm && (
+        <ConfirmReferences
+          items={confirm.items}
+          staging={changes}
+          onCancel={() => setConfirm(null)}
+          onConfirm={() => {
+            const chosen = confirm;
+            setConfirm(null);
+            void decide(chosen.kind, chosen.chosen, chosen.body, true);
+          }}
+        />
       )}
       {help && (
         <div className="help-backdrop" onClick={() => setHelp(false)}>

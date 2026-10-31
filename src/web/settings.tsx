@@ -4,6 +4,7 @@ import { ChipSelect } from './chip-select.tsx';
 import { keepDialogFocus } from './focus.ts';
 import { LANGUAGES, browserLanguage, setLanguage, t, useLanguage, type LanguageChoice } from './i18n.ts';
 import { setNotifications, testNotification, useNotifications } from './notifications.ts';
+import { browserStorage } from './storage.ts';
 import type { Theme } from './theme.tsx';
 import { ShortcutSettings } from './shortcut-settings.tsx';
 import { AboutSettings, LicenseSettings } from './about-settings.tsx';
@@ -14,6 +15,10 @@ import { SkillLibraryPanel, type SkillLibraryControls, type SkillLibraryOptions 
 
 type SettingsPage = 'general' | 'shortcuts' | 'about' | 'licenses' | 'diagnostics' | 'skills' | 'updates';
 
+// The review page reads this key: "off" stops it from looking up the
+// bibliography entries a change adds or modifies in Crossref, DBLP and arXiv.
+const REFERENCE_CHECKS = 'latex-review:references';
+
 // Browser preferences and workspace management share one sidebar entry.
 export function SettingsDialog({ theme, onTheme, onClose, onPeople, onSignOut, accountName, diagnostics, skills, updates, initialPage = 'general' }: { theme: Theme; onTheme: (theme: Theme) => void; onClose: () => void; onPeople?: () => void; onSignOut?: () => void; accountName?: string; diagnostics?: DiagnosticsSettingsProps; skills?: SkillLibraryOptions; updates?: UpdateApi; initialPage?: 'general' | 'shortcuts' }) {
   const dialog = useRef<HTMLDialogElement>(null);
@@ -23,6 +28,7 @@ export function SettingsDialog({ theme, onTheme, onClose, onPeople, onSignOut, a
   const [page, setPage] = useState<SettingsPage>(initialPage);
   const previousPage = useRef<SettingsPage>(initialPage);
   const [asking, setAsking] = useState(false), [test, setTest] = useState<'' | 'sent' | 'failed'>('');
+  const [checkReferences, setCheckReferences] = useState(() => browserStorage.getItem(REFERENCE_CHECKS) !== 'off');
   useEffect(() => {
     const opener = document.activeElement as HTMLElement | null;
     const element = dialog.current!;
@@ -82,6 +88,13 @@ export function SettingsDialog({ theme, onTheme, onClose, onPeople, onSignOut, a
         <button type="button" className="button secondary compact" onClick={() => setTest(testNotification() ? 'sent' : 'failed')}><Icon name="bell" size={14}/>{t('Send a test notification')}</button>
         {test && <span role="status">{test === 'sent' ? t('Sent. If nothing appeared, allow notifications for this browser in your system settings.') : t('This browser could not show the notification.')}</span>}
       </div>}
+      <div className="settings-row settings-toggle">
+        <div className="settings-text">
+          <label className="settings-name" htmlFor="settings-references">{t('Check references online')}</label>
+          <p id="settings-references-detail">{t('When a change adds or edits a bibliography entry, look up its title, authors, year and DOI in Crossref, DBLP and arXiv. Nothing else from your paper is sent.')}</p>
+        </div>
+        <input id="settings-references" type="checkbox" role="switch" className="switch" aria-describedby="settings-references-detail" checked={checkReferences} onChange={event => { setCheckReferences(event.target.checked); browserStorage.setItem(REFERENCE_CHECKS, event.target.checked ? 'on' : 'off'); }}/>
+      </div>
       <div className="settings-navigation">
         {skills && <button type="button" className="settings-navigation-row" data-settings-page="skills" onClick={() => setPage('skills')}><Icon name="spark" size={17}/><span>{t('Skills')}</span><Icon name="chevronRight" size={15}/></button>}
         <button type="button" className="settings-navigation-row" data-settings-page="shortcuts" onClick={() => setPage('shortcuts')}><Icon name="keyboard" size={17}/><span>{t('Keyboard shortcuts')}</span><Icon name="chevronRight" size={15}/></button>

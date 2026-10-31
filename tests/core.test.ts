@@ -47,6 +47,10 @@ test('review proxy only exposes review routes and keeps assets on the remote ori
   assert.ok(allowedReviewRoute('/api/tasks/p-test/rounds/1', 'GET'));
   assert.ok(allowedReviewRoute('/api/tasks/p-test/decide', 'POST'));
   assert.ok(allowedReviewRoute('/api/tasks/p-test/rounds/1/effects/c001', 'GET'));
+  assert.ok(allowedReviewRoute('/api/tasks/p-test/rounds/1/references', 'GET'));
+  assert.equal(allowedReviewRoute('/api/tasks/p-test/rounds/1/references', 'POST'), false);
+  assert.ok(allowedReviewRoute('/api/tasks/p-test/rounds/1/references/confirm', 'POST'));
+  assert.equal(allowedReviewRoute('/api/tasks/p-test/rounds/1/references/confirm', 'GET'), false);
   assert.equal(allowedReviewRoute('/api/tasks/p-test/rounds/1/effects/../x', 'GET'), false);
   assert.equal(allowedReviewRoute('/api/tasks/p-test/rounds/1/effects/c001', 'POST'), false);
   assert.equal(allowedReviewRoute('/api/shutdown', 'POST'), false);

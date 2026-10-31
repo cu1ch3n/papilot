@@ -1,5 +1,6 @@
 import { Repo, within } from "./git.ts";
 import { groups, opcodes } from "./diff.ts";
+import { entrySpans } from "./bib.ts";
 import type { Scope, Unit, Op } from "../types.ts";
 export const EXCERPT = 6000;
 export function textOf(data: Buffer | null): string | null {
@@ -34,6 +35,8 @@ export function diffUnits(
     const left = binary ? [] : splitLines(a!),
       right = binary ? [] : splitLines(b!);
     let hunks = binary ? [] : groups(opcodes(left, right));
+    if (!binary && file.endsWith(".bib"))
+      hunks = byEntry(hunks, entrySpans(a!), entrySpans(b!));
     const whole =
       binary || status !== "modified" || isFigure(file) || !hunks.length;
     if (whole) hunks = [[["replace", 0, left.length, 0, right.length]]];
@@ -60,6 +63,42 @@ export function diffUnits(
     }
   }
   return units;
+}
+// A bibliography entry is decided whole: hunks that touch the same entry,
+// before or after, or the same key on either side, become one change, so
+// accepting part of an entry cannot mix its old and new fields.
+export function byEntry(
+  hunks: Op[][],
+  before: { key: string; span: [number, number] }[],
+  after: { key: string; span: [number, number] }[],
+) {
+  // An empty range touches an entry it falls strictly inside.
+  const touches = ([a, b]: [number, number], [s, e]: [number, number]) =>
+    a === b ? s < a && a < e : a < e && s < b;
+  const root = hunks.map((_, i) => i),
+    find = (i: number): number => (root[i] === i ? i : (root[i] = find(root[i]))),
+    owner = new Map<string, number>();
+  hunks.forEach((hunk, i) => {
+    const old: [number, number] = [hunk[0][1], hunk.at(-1)![2]],
+      next: [number, number] = [hunk[0][3], hunk.at(-1)![4]],
+      keys = [
+        ...before.filter((e) => touches(old, e.span)).map((e) => e.key),
+        ...after.filter((e) => touches(next, e.span)).map((e) => e.key),
+      ];
+    for (const key of keys) {
+      const j = owner.get(key);
+      if (j === undefined) owner.set(key, i);
+      else root[find(i)] = find(j);
+    }
+  });
+  const merged = new Map<number, Op[]>();
+  hunks.forEach((hunk, i) => {
+    const r = find(i);
+    merged.set(r, [...(merged.get(r) ?? []), ...hunk]);
+  });
+  return [...merged.values()].map((ops) =>
+    ops.sort((p, q) => p[1] - q[1] || p[3] - q[3]),
+  );
 }
 function edits(units: Unit[], index: 1 | 3): Op[] {
   return units.flatMap((u) => u.ops).sort((a, b) => b[index] - a[index]);

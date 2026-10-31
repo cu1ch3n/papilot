@@ -261,6 +261,7 @@ export class Review {
       loose: render.loose,
       warnings: round.summary.warnings ?? [],
       files: `/files/${name}/${number}/`,
+      ...(render.references ? { references: render.references } : {}),
     };
   }
   history(name: string, round: Round): Record<string, History[]> {

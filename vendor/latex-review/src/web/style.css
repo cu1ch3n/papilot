@@ -32,6 +32,11 @@
   --after: #eef8f1;
   --after-edge: #68ab82;
   --head: #fafafa;
+  --warn: #8a5300;
+  --warn-soft: #fff8e6;
+  --warn-line: #f1d48c;
+  --ok-soft: #eef8f1;
+  --bad-soft: #fbeeee;
   --shadow: 0 1px 2px rgb(0 0 0 / 0.06), 0 4px 18px rgb(0 0 0 / 0.05);
   --paper-top: 24px;
   font: 14px/1.5 var(--sans);
@@ -587,6 +592,278 @@ kbd {
   background: #d6f0df;
   color: #11603a;
   text-decoration: none;
+}
+
+/* Bibliography entries of a .bib change, every field shown, with what the
+   online check found. */
+.references {
+  border-top: 1px solid var(--line);
+  background: var(--paper);
+}
+.reference-entry {
+  padding: 10px 14px 12px;
+  border-left: 3px solid var(--line);
+}
+.reference-entry + .reference-entry {
+  border-top: 1px solid var(--line);
+}
+.reference-entry[data-check="verified"],
+.reference-entry[data-check="confirmed"] {
+  border-left-color: var(--accept);
+}
+.reference-entry[data-check="mismatch"],
+.reference-entry[data-check="unreadable"] {
+  border-left-color: var(--reject);
+}
+/* Not found is a reason to look, not proof of an error: amber, not red. */
+.reference-entry[data-check="unverified"],
+.reference-entry[data-check="failed"],
+.reference-entry[data-check="skipped"],
+.reference-entry[data-check="off"],
+.reference-entry[data-check="checking"] {
+  border-left-color: var(--warn-line);
+}
+.reference-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  margin-bottom: 6px;
+}
+.reference-key {
+  font:
+    600 12.5px ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    monospace;
+  overflow-wrap: anywhere;
+}
+.reference-key del,
+.reference-entry td del {
+  background: var(--bad-soft);
+  color: var(--reject);
+  text-decoration: line-through;
+}
+.reference-key ins,
+.reference-entry td ins {
+  background: var(--ok-soft);
+  color: var(--accept);
+  text-decoration: none;
+}
+.reference-status {
+  font-size: 12px;
+  color: var(--muted);
+}
+.reference-check {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 0 7px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  white-space: nowrap;
+}
+.reference-check[data-check="verified"],
+.reference-check[data-check="confirmed"] {
+  color: var(--accept);
+  background: var(--ok-soft);
+  border-color: transparent;
+}
+.reference-check[data-check="mismatch"] {
+  color: var(--reject);
+  background: var(--bad-soft);
+  border-color: transparent;
+}
+.reference-check[data-check="unverified"],
+.reference-check[data-check="failed"],
+.reference-check[data-check="skipped"],
+.reference-check[data-check="off"],
+.reference-check[data-check="checking"] {
+  color: var(--warn);
+  background: var(--warn-soft);
+  border-color: transparent;
+}
+.reference-lines {
+  margin-left: auto;
+  font:
+    11px ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    monospace;
+  color: var(--muted);
+}
+.reference-problem {
+  margin: 4px 0 8px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: var(--bad-soft);
+  color: var(--reject);
+  font-size: 13px;
+}
+.reference-uncited {
+  margin: 0;
+  border-radius: 0;
+  border-top: 1px solid var(--line);
+}
+.reference-fields {
+  width: 100%;
+  border-collapse: collapse;
+  font:
+    12.5px/1.55 ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    monospace;
+}
+.reference-fields th {
+  width: 1%;
+  padding: 2px 12px 2px 0;
+  text-align: left;
+  vertical-align: top;
+  font-weight: 400;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.reference-fields td {
+  padding: 2px 0;
+  overflow-wrap: anywhere;
+}
+.reference-entry[data-status="modified"] tr:not([data-change]) td {
+  color: var(--muted);
+}
+.reference-entry[data-status="removed"] td {
+  text-decoration: line-through;
+  text-decoration-color: var(--reject);
+  color: var(--muted);
+}
+.reference-resolved {
+  color: var(--muted);
+}
+.reference-cited {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+.reference-verdict {
+  margin-top: 8px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: var(--head);
+  font-size: 13px;
+}
+.reference-verdict p {
+  margin: 0;
+}
+.reference-verdict[data-check="mismatch"] {
+  background: var(--bad-soft);
+}
+.reference-verdict[data-check="unverified"],
+.reference-verdict[data-check="failed"],
+.reference-verdict[data-check="off"],
+.reference-verdict[data-check="skipped"] {
+  background: var(--warn-soft);
+}
+.reference-differences {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 6px 12px;
+  margin: 8px 0 0;
+}
+.reference-differences dt {
+  font-weight: 600;
+  white-space: nowrap;
+}
+.reference-differences dd {
+  margin: 0;
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.reference-side {
+  display: inline-block;
+  min-width: 5.5em;
+  margin-right: 6px;
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  color: var(--muted);
+}
+.reference-record {
+  margin: 8px 0 0 !important;
+  overflow-wrap: anywhere;
+}
+.reference-record a {
+  color: var(--accent);
+}
+.reference-confirmation {
+  margin: 8px 0 0 !important;
+}
+.reference-confirm {
+  border: 1px solid var(--line);
+  background: var(--paper);
+  border-radius: 6px;
+  padding: 3px 10px;
+  font-size: 12.5px;
+}
+.reference-entry[data-check="confirmed"] .reference-verdict {
+  background: var(--head);
+}
+.references-banner summary strong {
+  font-weight: 600;
+}
+.references-flagged {
+  margin: 6px 0 2px;
+  padding-left: 18px;
+}
+.references-flagged li + li {
+  margin-top: 3px;
+}
+.references-confirm ul {
+  margin: 0 0 12px;
+  padding-left: 18px;
+  font-size: 13px;
+}
+.references-confirm li + li {
+  margin-top: 4px;
+}
+.references-confirm code {
+  font-size: 12.5px;
+  overflow-wrap: anywhere;
+}
+.references-confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.references-confirm-actions .accept {
+  color: var(--accept);
+  font-weight: 600;
+}
+@media (max-width: 560px) {
+  .reference-fields,
+  .reference-fields tbody,
+  .reference-fields tr,
+  .reference-fields th,
+  .reference-fields td {
+    display: block;
+    width: auto;
+  }
+  .reference-fields tr + tr {
+    margin-top: 4px;
+  }
+  .reference-fields th {
+    padding: 0;
+    font-size: 11px;
+  }
+  .reference-differences {
+    grid-template-columns: 1fr;
+    gap: 2px;
+  }
+  .reference-differences dd + dt {
+    margin-top: 6px;
+  }
+  .reference-lines {
+    margin-left: 0;
+  }
 }
 
 /* Messages above the document */
